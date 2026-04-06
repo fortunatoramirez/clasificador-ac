@@ -822,6 +822,100 @@ app.use((err, req, res, next) => {
     next();
 });
 
+
+
+const uploadVisual = multer({
+    storage: multer.memoryStorage(),   // No guarda en disco permanente
+    fileFilter: (req, file, cb) => {
+        const allowed = ['.mp3', '.wav'];
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (allowed.includes(ext)) cb(null, true);
+        else cb(new Error('Solo .mp3 y .wav'), false);
+    },
+    limits: { fileSize: 10 * 1024 * 1024 }
+});
+ 
+app.post('/api/analyze-visual', uploadVisual.single('audio'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Falta archivo de audio.' });
+ 
+    // 1. Guardar temporalmente para que Python pueda leerlo
+    const tmpDir  = path.join(__dirname, 'uploads', 'tmp');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+ 
+    const tmpName = `visual_${Date.now()}_${req.file.originalname}`;
+    const tmpPath = path.join(tmpDir, tmpName);
+ 
+    fs.writeFileSync(tmpPath, req.file.buffer);
+ 
+    // 2. Resolver ejecutable Python (igual que en /upload)
+    let pythonExecutable;
+    const venvPathWin   = path.join(__dirname, 'venv', 'Scripts', 'python.exe');
+    const venvPathLinux = path.join(__dirname, 'venv', 'bin', 'python');
+ 
+    if (process.platform === 'win32' && fs.existsSync(venvPathWin)) {
+        pythonExecutable = venvPathWin;
+    } else if (process.platform !== 'win32' && fs.existsSync(venvPathLinux)) {
+        pythonExecutable = venvPathLinux;
+    } else {
+        pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
+    }
+ 
+    const scriptPath = path.join(__dirname, 'classify_visual.py');
+    console.log(`[Visual] Python: ${pythonExecutable} | Script: ${scriptPath}`);
+ 
+    const pythonProcess = spawn(pythonExecutable, [scriptPath, tmpPath]);
+ 
+    let outputData = '';
+    let errorData  = '';
+ 
+    pythonProcess.stdout.on('data', d => outputData += d.toString());
+    pythonProcess.stderr.on('data', d => {
+        errorData += d.toString();
+        console.error(`[PyVisual LOG]: ${d.toString()}`);
+    });
+ 
+    pythonProcess.on('error', err => {
+        errorData = `No se pudo iniciar Python: ${err.message}`;
+    });
+ 
+    pythonProcess.on('close', code => {
+        // Limpiar archivo temporal
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+ 
+        if (code !== 0 || !outputData) {
+            return res.status(500).json({
+                error: 'Error en el análisis Python.',
+                details: errorData || 'Sin datos de salida.'
+            });
+        }
+ 
+        let result;
+        try {
+            result = JSON.parse(outputData.trim());
+        } catch (e) {
+            console.error('[Visual] JSON parse error:', outputData.slice(0, 300));
+            return res.status(500).json({ error: 'Respuesta JSON inválida del script.' });
+        }
+ 
+        if (result.status === 'error') {
+            return res.status(500).json({ error: result.message });
+        }
+ 
+        // Devolver JSON completo al dashboard
+        res.json(result);
+    });
+});
+ 
+// ============================================================
+// RUTA HTML: /dashboard
+// Sirve el archivo pcg-dashboard.html como página del sistema
+// Agregar pcg-dashboard.html a la carpeta public/
+// ============================================================
+app.get('/dashboard', requireLogin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'pcg-dashboard.html'));
+});
+
+
 app.listen(PORT, () => {
     console.log(`🚀 Servidor en ${PORT}`);
 });
