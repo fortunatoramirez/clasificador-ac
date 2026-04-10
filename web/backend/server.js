@@ -74,11 +74,11 @@ app.get('/tipo-usuario', requireLogin, (req, res) => {
 
 // Ruta protegida (Página principal después de iniciar sesión)
 app.get('/', requireLogin, (_req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
+  res.sendFile(__dirname + '../frontend/index.html');
 });
 
 // Servir archivos estáticos (HTML)
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.post('/registrar', (req, res) => {
@@ -285,8 +285,8 @@ const upload = multer({
 
 
 // --- RUTAS ---
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.get('/ver-pacientes', requireRole(['medico']), (req, res) => res.sendFile(path.join(__dirname, 'public', 'pacientes.html')));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, '../frontend', 'index.html')));
+app.get('/ver-pacientes', requireRole(['medico']), (req, res) => res.sendFile(path.join(__dirname, '../frontend', 'pacientes.html')));
 
 app.get('/api/pacientes', (req, res) => {
     const query = `
@@ -442,7 +442,7 @@ app.post('/upload', upload.single('cancion'), (req, res) => {
 
 // 2. RUTA PARA SERVIR LA VISTA DE DETALLE
 app.get('/ver-detalle', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'detalle.html'));
+    res.sendFile(path.join(__dirname, '../frontend', 'detalle.html'));
 });
 
 // 3. API PARA OBTENER UN DIAGNÓSTICO ESPECÍFICO POR ID
@@ -814,7 +814,7 @@ app.post('/api/admin/retrain/discard', requireLogin, requireRole(['admin']), (re
 
 // Ruta para acceder al panel (HTML)
 app.get('/admin', requireLogin, requireRole(['admin']), (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    res.sendFile(path.join(__dirname, '../frontend', 'admin.html'));
 });
 
 app.use((err, req, res, next) => {
@@ -912,7 +912,7 @@ app.post('/api/analyze-visual', uploadVisual.single('audio'), (req, res) => {
 // Agregar pcg-dashboard.html a la carpeta public/
 // ============================================================
 app.get('/dashboard', requireLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'pcg-dashboard.html'));
+    res.sendFile(path.join(__dirname, '../frontend', 'pcg-dashboard.html'));
 });
 
 
