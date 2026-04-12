@@ -11,7 +11,7 @@ const XLSX   = require('xlsx');
 const app = express();
 const PORT = 5001;
 
-
+require('dotenv').config();
 
 app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -19,7 +19,7 @@ app.use(bodyParser.json());
 
 // Configuración de la sesión
 app.use(session({
-  secret: 'secretKey',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false } // en producción con https poner true
@@ -28,10 +28,10 @@ app.use(session({
 
 // --- 1. CONFIGURACIÓN BASE DE DATOS ---
 const db = mysql.createPool({
-    host: 'localhost',
-    user: 'admin',      // Asegúrate que este usuario existe en MySQL
-    password: 'Galgos2026!',
-    database: 'hospital_db',
+    host:     process.env.DB_HOST,
+    user:     process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
@@ -74,7 +74,7 @@ app.get('/tipo-usuario', requireLogin, (req, res) => {
 
 // Ruta protegida (Página principal después de iniciar sesión)
 app.get('/', requireLogin, (_req, res) => {
-  res.sendFile(__dirname + '../frontend/index.html');
+  res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
 // Servir archivos estáticos (HTML)
@@ -285,7 +285,7 @@ const upload = multer({
 
 
 // --- RUTAS ---
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, '../frontend', 'index.html')));
+
 app.get('/ver-pacientes', requireRole(['medico']), (req, res) => res.sendFile(path.join(__dirname, '../frontend', 'pacientes.html')));
 
 app.get('/api/pacientes', (req, res) => {

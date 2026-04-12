@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle de Audio</title>
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+    <style>
+        :root { --primary: #007bff; --primary-dark: #0056b3; --bg: #f0f2f5; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); padding: 40px; display: flex; justify-content: center; }
+        
+        .container { 
+            background: white; width: 100%; max-width: 900px; padding: 30px; 
+            border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+        }
+
+        h1 { color: #333; margin-bottom: 5px; }
+        .badge { padding: 5px 12px; border-radius: 15px; font-weight: bold; font-size: 0.9rem; color: white; }
+        .bg-green { background-color: #28a745; }
+        .bg-red   { background-color: #dc3545; }
+
+        #waveform {
+            width: 100%;
+            margin: 30px 0;
+            background: #ffffff;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+        }
+
+        .zoom-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        input[type=range] { flex-grow: 1; cursor: pointer; }
+
+        .controls { display: flex; justify-content: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+        
+        button {
+            padding: 10px 30px; border: none; border-radius: 50px; 
+            cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.2s;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .btn-play { background: var(--primary); color: white; box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3); }
+        .btn-play:hover { background: var(--primary-dark); transform: scale(1.05); }
+
+        /* ── NUEVO: botón pipeline ── */
+        .btn-pipeline {
+            background: #6f42c1;
+            color: white;
+            box-shadow: 0 4px 10px rgba(111,66,193,0.3);
+        }
+        .btn-pipeline:hover { background: #4b2d8a; transform: scale(1.05); }
+        
+        .btn-back {
+            background: #eee; color: #333; text-decoration: none;
+            display: inline-block; margin-bottom: 20px;
+            padding: 8px 15px; border-radius: 5px; font-size: 0.9rem;
+        }
+        .btn-back:hover { background: #ddd; }
+
+        #loading-wave { text-align: center; color: #666; margin: 20px; display: none; }
+
+        /* ════════════════════════════════════════
+           MODAL DEL DASHBOARD PIPELINE
+        ════════════════════════════════════════ */
+        #pipelineModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+        #pipelineModal.open { display: flex; }
+
+        .modal-box {
+            background: #04070f;
+            width: 96vw;
+            height: 92vh;
+            border-radius: 14px;
+            border: 1px solid #1a2e4a;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 22px;
+            border-bottom: 1px solid #1a2e4a;
+            background: #0b1120;
+            flex-shrink: 0;
+        }
+        .modal-topbar h2 {
+            color: #00e5ff;
+            font-size: 1rem;
+            font-family: monospace;
+            letter-spacing: .1em;
+        }
+        .modal-close {
+            background: none; border: 1px solid #1a2e4a;
+            color: #6b8cae; border-radius: 6px;
+            padding: 6px 14px; cursor: pointer; font-size: .85rem;
+            font-family: monospace;
+        }
+        .modal-close:hover { border-color: #ff4d6d; color: #ff4d6d; }
+
+        .modal-body {
+            flex: 1;
+            overflow: hidden;
+        }
+        .modal-body iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* Estado de carga del iframe */
+        .modal-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #6b8cae;
+            font-family: monospace;
+            gap: 16px;
+        }
+        .pulse-dot {
+            width: 14px; height: 14px;
+            background: #00e5ff;
+            border-radius: 50%;
+            animation: pulse-dot 1.2s ease-in-out infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50%       { transform: scale(1.6); opacity: .5; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <a href="/ver-pacientes" class="btn-back">← Volver al listado</a>
+        
+        <div id="info-header">
+            <h1 id="paciente-nombre">Cargando...</h1>
+            <p>Diagnóstico IA: <span id="diag-badge" class="badge">...</span></p>
+        </div>
+
+        <div id="loading-wave">🌊 Generando gráfica...</div>
+
+        <div id="waveform"></div>
+
+        <div class="zoom-container">
+            <span style="font-size: 0.8rem; font-weight: bold; color: #666;">🔍 Zoom:</span>
+            <input type="range" id="zoom-slider" min="10" max="500" value="10">
+        </div>
+
+        <div class="controls">
+            <button id="playPauseBtn" class="btn-play">▶ Reproducir</button>
+            <!-- ── NUEVO BOTÓN ── -->
+            <button id="btnPipeline" class="btn-pipeline" onclick="abrirPipeline()">
+                📊 Ver Pipeline de Señal
+            </button>
+        </div>
+
+        <div style="background: #f1f1f1; padding: 15px; border-radius: 8px; margin-top: 20px;">
+            <h3>Detalles Técnicos</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div><strong>Confianza:</strong> <span id="confianza">...</span>%</div>
+                <div><strong>Latidos analizados:</strong> <span id="ciclos">...</span></div>
+                <div style="grid-column: span 2;"><strong>Fecha:</strong> <span id="fecha">...</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         MODAL PIPELINE
+    ════════════════════════════════════════ -->
+    <div id="pipelineModal">
+        <div class="modal-box">
+            <div class="modal-topbar">
+                <h2>📊 PCG PIPELINE · <span id="modalNombre">—</span></h2>
+                <button class="modal-close" onclick="cerrarPipeline()">✕ Cerrar</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- El iframe se inyecta dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const params      = new URLSearchParams(window.location.search);
+        const id          = params.get('id');
+        const abrirVisual = params.get('visual') === '1'; // ← viene de pacientes.html
+        const loadingMsg  = document.getElementById('loading-wave');
+
+        let audioUrl = null;   // guardamos la URL del audio para el pipeline
+        let nombrePaciente = '';
+
+        // ── WaveSurfer ──────────────────────────────────────────────
+        const wavesurfer = WaveSurfer.create({
+            container: '#waveform',
+            waveColor: '#007bff',
+            progressColor: '#0056b3',
+            cursorWidth: 0,
+            height: 150,
+            normalize: true,
+            responsive: true,
+        });
+
+        loadingMsg.style.display = 'block';
+
+        fetch(`/api/diagnostico/${id}`)
+            .then(res => res.json())
+            .then(data => {
+                nombrePaciente = data.nombre;
+                audioUrl       = data.url_web;
+
+                document.getElementById('paciente-nombre').textContent = data.nombre + ` (${data.edad} años)`;
+                document.getElementById('confianza').textContent        = data.confianza;
+                document.getElementById('ciclos').textContent           = data.ciclos_detectados;
+                document.getElementById('fecha').textContent            = new Date(data.fecha_analisis).toLocaleString();
+
+                const badge = document.getElementById('diag-badge');
+                badge.textContent = data.resultado_ia;
+                badge.classList.add(data.resultado_ia.toLowerCase().includes('normal') ? 'bg-green' : 'bg-red');
+
+                wavesurfer.load(data.url_web);
+
+                // Si viene el parámetro ?visual=1, abrir modal automáticamente
+                if (abrirVisual) {
+                    // Esperar un tick para que el DOM esté listo
+                    setTimeout(() => abrirPipeline(), 300);
+                }
+            })
+            .catch(err => {
+                console.error("Error:", err);
+                loadingMsg.textContent = "Error cargando audio.";
+            });
+
+        wavesurfer.on('ready', () => { loadingMsg.style.display = 'none'; });
+
+        const slider = document.getElementById('zoom-slider');
+        slider.oninput = function () { wavesurfer.zoom(Number(this.value)); };
+
+        const btn = document.getElementById('playPauseBtn');
+        btn.addEventListener('click', () => { wavesurfer.playPause(); });
+
+        wavesurfer.on('play',   () => btn.textContent = '⏸ Pausar');
+        wavesurfer.on('pause',  () => btn.textContent = '▶ Reproducir');
+        wavesurfer.on('finish', () => btn.textContent = '↺ Repetir');
+
+        // ── MODAL PIPELINE ──────────────────────────────────────────
+        function abrirPipeline() {
+            const modal    = document.getElementById('pipelineModal');
+            const body     = document.getElementById('modalBody');
+            const modalNom = document.getElementById('modalNombre');
+
+            modalNom.textContent = nombrePaciente || '—';
+
+            // Mostrar spinner mientras carga el iframe
+            body.innerHTML = `
+                <div class="modal-loading">
+                    <div class="pulse-dot"></div>
+                    <span style="font-size:.8rem;letter-spacing:.12em;">CARGANDO DASHBOARD…</span>
+                </div>
+            `;
+
+            modal.classList.add('open');
+
+            // Pequeño delay para animar el spinner antes del iframe
+            setTimeout(() => {
+                // Pasamos el id del diagnóstico al dashboard via query param
+                // El dashboard cargará el audio desde /api/diagnostico/:id
+                const iframeSrc = `/dashboard?diagId=${id}`;
+                body.innerHTML = `<iframe src="${iframeSrc}" title="PCG Pipeline"></iframe>`;
+            }, 400);
+        }
+
+        function cerrarPipeline() {
+            const modal = document.getElementById('pipelineModal');
+            modal.classList.remove('open');
+            // Destruir iframe al cerrar para liberar memoria
+            document.getElementById('modalBody').innerHTML = '';
+        }
+
+        // Cerrar con Escape
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') cerrarPipeline();
+        });
+    </script>
+</body>
+</html>
