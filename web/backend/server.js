@@ -10,8 +10,23 @@ const bodyParser = require('body-parser');
 const XLSX   = require('xlsx');
 const app = express();
 const PORT = 5001;
-
 require('dotenv').config();
+
+// ── Rutas de scripts Python ──────────────────────────
+const PY_CLASIFICAR    = path.join(__dirname, '../../pcg_processing/classification/arboldeprediccion.py');
+const PY_VISUAL        = path.join(__dirname, '../../pcg_processing/classification/classify_visual.py');
+const PY_EXTRACT       = path.join(__dirname, '../../pcg_processing/preprocessing/extract_features.py');
+const PY_RETRAIN_EVAL  = path.join(__dirname, '../../pcg_processing/training/retrain_eval.py');
+const PY_TRAIN         = path.join(__dirname, '../../pcg_processing/training/train.py');
+
+// ── Rutas de modelos ─────────────────────────────────
+const MODEL_PROD_PATH  = path.join(__dirname, '../../models/modelo_pcg_final');
+const MODEL_CAND_PATH  = path.join(__dirname, '../../models/modelo_pcg_candidato');
+
+// ── Rutas de datos ───────────────────────────────────
+const DATASET_PATH      = path.join(__dirname, '../../dataset.xlsx');
+const DATASET_TEMP_PATH = path.join(__dirname, '../../dataset_candidato.xlsx');
+
 
 app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -315,23 +330,11 @@ app.post('/upload', upload.single('cancion'), (req, res) => {
     const nombre = req.body.nombre || "Anónimo";
     const edad = req.body.edad || 0;
     const filePath = req.file.path; // Multer ya da la ruta completa
-    const scriptPath = path.join(__dirname, 'arboldeprediccion.py');
+    const scriptPath = PY_CLASIFICAR;
 
     // --- CORRECCIÓN DE LA RUTA DE PYTHON ---
     // Intentamos buscar el venv, si no existe, usamos el python global del sistema
-    let pythonExecutable;
-    const venvPathWin = path.join(__dirname, 'venv', 'Scripts', 'python.exe');
-    const venvPathLinux = path.join(__dirname, 'venv', 'bin', 'python');
-
-    if (process.platform === 'win32' && fs.existsSync(venvPathWin)) {
-        pythonExecutable = venvPathWin;
-    } else if (process.platform !== 'win32' && fs.existsSync(venvPathLinux)) {
-        pythonExecutable = venvPathLinux;
-    } else {
-        // FALLBACK: Si no encuentra la carpeta venv, usa el comando global
-        console.warn("⚠️ Advertencia: No se encontró carpeta 'venv'. Usando Python global.");
-        pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
-    }
+    const pythonExecutable = getPythonExe();
 
     console.log(`--- PROCESANDO ---`);
     console.log(`Script: ${scriptPath}`);
@@ -543,19 +546,9 @@ app.post('/api/admin/retrain', requireLogin, requireRole(['admin']), (req, res) 
     res.setHeader('Content-Type', 'text/plain');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    const scriptPath = path.join(__dirname, 'train.py');
+    const scriptPath = PY_TRAIN;
     
-    let pythonExecutable;
-    const venvPathWin = path.join(__dirname, 'venv', 'Scripts', 'python.exe');
-    const venvPathLinux = path.join(__dirname, 'venv', 'bin', 'python');
-
-    if (process.platform === 'win32' && fs.existsSync(venvPathWin)) {
-        pythonExecutable = venvPathWin;
-    } else if (process.platform !== 'win32' && fs.existsSync(venvPathLinux)) {
-        pythonExecutable = venvPathLinux;
-    } else {
-        pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
-    }
+    const pythonExecutable = getPythonExe();
 
     res.write(`🚀 Iniciando motor de IA...\n`);
     res.write(`📂 Ejecutando: ${scriptPath}\n`);
@@ -587,19 +580,15 @@ app.post('/api/admin/retrain', requireLogin, requireRole(['admin']), (req, res) 
 //  npm install multer xlsx
 // ============================================================
 
-// ── Rutas de archivos clave ──────────────────────────────────
-const DATASET_PATH       = path.join(__dirname, 'dataset.xlsx');
-const DATASET_TEMP_PATH  = path.join(__dirname, 'dataset_candidato.xlsx');
-const MODEL_PROD_PATH    = path.join(__dirname, 'modelo_pcg_final');        // sin .pkl
-const MODEL_CAND_PATH    = path.join(__dirname, 'modelo_pcg_candidato');    // sin .pkl
+
 
 // ── Python executable (reutiliza tu lógica existente) ────────
 function getPythonExe() {
-  const win   = path.join(__dirname, 'venv', 'Scripts', 'python.exe');
-  const linux = path.join(__dirname, 'venv', 'bin', 'python');
-  if (process.platform === 'win32' && fs.existsSync(win))   return win;
-  if (process.platform !== 'win32' && fs.existsSync(linux)) return linux;
-  return process.platform === 'win32' ? 'python' : 'python3';
+  const win = path.join(__dirname, '../../.venv', 'Scripts', 'python.exe');
+  console.log('Buscando Python en:', win);
+  console.log('Existe:', fs.existsSync(win));
+  if (process.platform === 'win32' && fs.existsSync(win)) return win;
+  return 'python';
 }
 
 // ── Multer: audios temporales ─────────────────────────────────
@@ -668,7 +657,7 @@ app.post('/api/admin/dataset/add',
   }
 
   const python      = getPythonExe();
-  const extractScript = path.join(__dirname, 'extract_features.py');
+  const extractScript = path.join(__dirname, PY_EXTRACT);
   const results     = [];
 
   // Cargar dataset base (producción o candidato si ya existe)
@@ -741,7 +730,7 @@ app.post('/api/admin/retrain/eval', requireLogin, requireRole(['admin']), (req, 
   }
 
   const python     = getPythonExe();
-  const evalScript = path.join(__dirname, 'retrain_eval.py');
+  const evalScript = PY_RETRAIN_EVAL
 
   let stdout = '';
   const proc = spawn(python, [evalScript, DATASET_TEMP_PATH, MODEL_CAND_PATH]);
@@ -848,19 +837,9 @@ app.post('/api/analyze-visual', uploadVisual.single('audio'), (req, res) => {
     fs.writeFileSync(tmpPath, req.file.buffer);
  
     // 2. Resolver ejecutable Python (igual que en /upload)
-    let pythonExecutable;
-    const venvPathWin   = path.join(__dirname, 'venv', 'Scripts', 'python.exe');
-    const venvPathLinux = path.join(__dirname, 'venv', 'bin', 'python');
+    const pythonExecutable = getPythonExe();
  
-    if (process.platform === 'win32' && fs.existsSync(venvPathWin)) {
-        pythonExecutable = venvPathWin;
-    } else if (process.platform !== 'win32' && fs.existsSync(venvPathLinux)) {
-        pythonExecutable = venvPathLinux;
-    } else {
-        pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
-    }
- 
-    const scriptPath = path.join(__dirname, 'classify_visual.py');
+    const scriptPath = PY_VISUAL;
     console.log(`[Visual] Python: ${pythonExecutable} | Script: ${scriptPath}`);
  
     const pythonProcess = spawn(pythonExecutable, [scriptPath, tmpPath]);
