@@ -1,82 +1,154 @@
 # classify_visual.py
-# Usa EXACTAMENTE el mismo pipeline que classify.py
-# y devuelve los campos que espera pcg-dashboard.html
+# Mismo pipeline que arboldeprediccion.py (pycaret + python_speech_features)
+# Devuelve además los datos de gráficas para pcg-dashboard.html
 
-import sys, os, json, warnings
+import sys
+import os
+import json
+import warnings
+import contextlib
+
 import numpy as np
-import joblib
 import librosa
-from scipy.signal import butter, filtfilt, find_peaks
+import pandas as pd
+from scipy.signal import butter, filtfilt
+from python_speech_features import mfcc
+from pycaret.classification import load_model, predict_model
 
 warnings.filterwarnings("ignore")
 
 MAX_POINTS = 2000
-TARGET_FS  = 2000
-DURATION   = 5
+
+
+@contextlib.contextmanager
+def suppress_stdout():
+    with open(os.devnull, 'w') as devnull:
+        old_stdout = sys.stdout
+        sys.stdout = devnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CLASE IDENTICA A classify.py
+# PIPELINE IDENTICO A arboldeprediccion.py
 # ─────────────────────────────────────────────────────────────────────────────
 
 class HeartSignalProcessor:
-    def __init__(self, fs=2000):
+    def __init__(self, fs=None):
         self.target_fs = fs
 
-    def preprocess_audio(self, file_path, duration=5):
+    def preprocess_audio(self, file_path):
         try:
-            x, fs = librosa.load(file_path, sr=self.target_fs, duration=duration)
+            x, fs = librosa.load(file_path, sr=self.target_fs, mono=True)
         except Exception as e:
-            return None, None
-        x = (x - np.min(x)) / (np.max(x) - np.min(x) + 1e-8)
-        x = x * 2 - 1
-        return x, fs
+            raise Exception(f"Error leyendo {file_path}: {e}")
+        x = x / (np.max(np.abs(x)) + 1e-12)
+        t = np.arange(len(x)) / fs
+        return x, fs, t
 
     def compute_shannon_envelope(self, x, fs):
         p    = np.abs(x)
-        p    = p / (np.max(p) + 1e-8)
-        E    = -p * np.log10(p + 1e-8)
-        E_z  = (E - np.mean(E)) / (np.std(E) + 1e-8)
-        Env0 = (E_z - np.min(E_z)) / (np.max(E_z) - np.min(E_z) + 1e-8)
-        b, a = butter(4, 15 / (0.5 * fs), btype='low')
+        p    = p / (np.max(p) + 1e-12)
+        E    = -p * np.log10(p + 1e-12)
+        E_z  = (E - np.mean(E)) / (np.std(E) + 1e-12)
+        Env0 = (E_z - np.min(E_z)) / (np.max(E_z) - np.min(E_z) + 1e-12)
+        fc   = 9
+        b, a = butter(4, fc / (fs / 2), 'low')
         Env  = filtfilt(b, a, Env0)
-        Env  = (Env - np.min(Env)) / (np.max(Env) - np.min(Env) + 1e-8)
+        Env  = (Env - np.min(Env)) / (np.max(Env) - np.min(Env) + 1e-12)
         return Env
 
-    def segment_cycles(self, Env, fs):
-        threshold = np.mean(Env) * 1.1
-        peaks, _  = find_peaks(Env, height=threshold, distance=int(0.15 * fs))
-        if len(peaks) < 2:
-            return []
-        window_size = int(0.5 * fs)
-        min_rr      = int(0.30 * fs)
-        regions = []
-        for p in peaks:
-            s = max(0, p - window_size // 2)
-            e = min(len(Env), p + window_size // 2)
-            if (e - s) > min_rr:
-                regions.append((s, e))
-        return regions
+    def detect_cycles(self, Env, x, t, fs):
+        d = np.diff(Env)
+        idx_ext, tipo = [], []
 
-    def extract_features(self, x, fs, cycles):
-        features_list = []
-        for (s, e) in cycles:
-            seg = x[s:e]
-            if len(seg) < 512:
+        for i in range(len(d) - 1):
+            if d[i] < 0 and d[i + 1] > 0:
+                idx_ext.append(i + 1); tipo.append(1)
+            elif d[i] > 0 and d[i + 1] < 0:
+                idx_ext.append(i + 1); tipo.append(2)
+
+        tri_samp, tri_time, tri_amp = [], [], []
+        for k in range(len(tipo) - 2):
+            if tipo[k] == 1 and tipo[k+1] == 2 and tipo[k+2] == 1:
+                i1, i2, i3 = idx_ext[k], idx_ext[k+1], idx_ext[k+2]
+                tri_samp.append([i1, i2, i3])
+                tri_time.append([t[i1], t[i2], t[i3]])
+                tri_amp.append([Env[i1], Env[i2], Env[i3]])
+
+        if len(tri_samp) == 0:
+            raise Exception("No se detectaron triángulos en la envolvente")
+
+        areas = []
+        for i in range(len(tri_time)):
+            x1,y1 = tri_time[i][0], tri_amp[i][0]
+            x2,y2 = tri_time[i][1], tri_amp[i][1]
+            x3,y3 = tri_time[i][2], tri_amp[i][2]
+            areas.append(0.5 * abs(x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2)))
+        areas = np.array(areas)
+
+        Amed     = 0.6 * np.max(areas)
+        mask_big = areas > Amed
+        big_idx  = np.where(mask_big)[0]
+
+        ciclos_ref = []
+        minRR = int(0.1 * fs)
+        maxRR = int(2.0 * fs)
+
+        i = 0
+        while i < len(big_idx):
+            start = tri_samp[big_idx[i]][0]
+            end   = tri_samp[big_idx[i]][2]
+            if minRR <= (end - start) <= maxRR:
+                if len(ciclos_ref) == 0 or start > ciclos_ref[-1][1]:
+                    ciclos_ref.append([start, end])
+                i += 2
+            else:
+                i += 1
+
+        if len(ciclos_ref) == 0:
+            raise Exception("No se detectaron ciclos válidos")
+
+        iS1_idx = [c[0] for c in ciclos_ref]
+        iS1_idx.append(len(x) - 1)
+        return iS1_idx, ciclos_ref
+
+    def extract_features(self, x, fs, iS1_idx):
+        Ncoef   = 13
+        winlen  = 0.025
+        winstep = 0.01
+        MFCC_matrix = []
+        energias    = []
+
+        for k in range(len(iS1_idx) - 1):
+            i1, i2 = iS1_idx[k], iS1_idx[k+1]
+            ciclo  = x[i1:i2]
+            if len(ciclo) < int(0.012 * fs):
                 continue
-            mfccs = librosa.feature.mfcc(y=seg, sr=fs, n_mfcc=13,
-                                          n_fft=2048, hop_length=512)
-            features_list.append(np.concatenate([np.mean(mfccs, axis=1),
-                                                  np.std(mfccs,  axis=1)]))
-        return np.array(features_list)
+            frame_len = int(winlen * fs)
+            nfft      = max(512, 1 << (frame_len - 1).bit_length())
+            m = mfcc(ciclo, samplerate=fs, numcep=Ncoef,
+                     winlen=winlen, winstep=winstep, nfft=nfft)
+            if m.size == 0:
+                continue
+            MFCC_matrix.append(np.mean(m, axis=0))
+            energias.append(np.sqrt(np.mean(ciclo ** 2)))
+
+        if len(MFCC_matrix) == 0:
+            raise Exception("No se extrajeron MFCC")
+
+        energias = np.array(energias).reshape(-1, 1)
+        features = np.hstack([MFCC_matrix, energias[:len(MFCC_matrix)]])
+        return features, MFCC_matrix
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def ds(signal, t, n=MAX_POINTS):
-    """Downsample manteniendo representatividad."""
+def downsample(signal, t, n=MAX_POINTS):
     if len(signal) <= n:
         return t.tolist(), signal.tolist()
     step = len(signal) // n
@@ -84,12 +156,6 @@ def ds(signal, t, n=MAX_POINTS):
 
 def safe(arr):
     return np.nan_to_num(np.asarray(arr, dtype=float)).tolist()
-
-def split_peaks(peaks):
-    """Separar picos alternados como S1/S2 (simplificado)."""
-    s1 = peaks[0::2]
-    s2 = peaks[1::2]
-    return s1, s2
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -101,67 +167,59 @@ def main():
 
     try:
         if len(sys.argv) < 2:
-            raise Exception("No se recibio la ruta del archivo")
+            raise Exception("No se recibió la ruta del archivo")
 
-        file_path  = sys.argv[1]
-        model_path = os.path.join(os.path.dirname(__file__), 'heart_sound_model.pkl')
+        file_path = sys.argv[1]
 
-        if not os.path.exists(model_path):
-            raise Exception("Modelo no encontrado. Ejecuta train.py primero.")
+        # Modelo en models/ (raíz del proyecto)
+        model_dir  = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'models')
+        model_name = os.path.join(model_dir, "modelo_pcg_final")
 
-        clf       = joblib.load(model_path)
+        with suppress_stdout():
+            modelo = load_model(model_name)
+
         processor = HeartSignalProcessor()
 
-        # ── Etapa 0: carga y normalizacion ───────────────────────────────────
-        x, fs = processor.preprocess_audio(file_path, duration=DURATION)
-        if x is None:
-            raise Exception("Error leyendo audio")
-        t = np.arange(len(x)) / fs
+        # ── Señal ────────────────────────────────────────────────────────────
+        x, fs, t = processor.preprocess_audio(file_path)
+        Env       = processor.compute_shannon_envelope(x, fs)
+        iS1_idx, ciclos_ref = processor.detect_cycles(Env, x, t, fs)
+        features, MFCC_matrix = processor.extract_features(x, fs, iS1_idx)
 
-        # ── Etapa 4b: envolvente Shannon (la que usa classify.py) ────────────
-        Env = processor.compute_shannon_envelope(x, fs)
+        # ── Clasificación ────────────────────────────────────────────────────
+        Ncoef   = 13
+        df_cols = [f"MFCC_{i+1}" for i in range(Ncoef)] + ["RMS"]
+        df      = pd.DataFrame(features, columns=df_cols)
 
-        # ── Etapas 5-6: segmentacion y features ─────────────────────────────
-        cycles = processor.segment_cycles(Env, fs)
-        feats  = processor.extract_features(x, fs, cycles)
+        with suppress_stdout():
+            pred = predict_model(modelo, data=df)
+        labels = pred["prediction_label"].values
 
-        # ── Clasificacion identica a classify.py ─────────────────────────────
-        if len(feats) == 0:
-            diag_class      = "No concluyente"
-            diag_confidence = 0
-            diag_cycles     = 0
-        else:
-            preds          = clf.predict(feats)
-            unique, counts = np.unique(preds, return_counts=True)
-            majority       = unique[np.argmax(counts)]
-            conf           = (np.max(counts) / len(preds)) * 100
-            diag_class     = str(majority)
-            diag_confidence = round(float(conf), 2)
-            diag_cycles     = int(len(preds))
+        unique, counts = np.unique(labels, return_counts=True)
+        majority   = unique[np.argmax(counts)]
+        confidence = round((np.max(counts) / len(labels)) * 100, 2)
 
-        # ── Picos y BPM ───────────────────────────────────────────────────────
-        threshold  = np.mean(Env) * 1.1
-        all_peaks, _ = find_peaks(Env, height=threshold, distance=int(0.15 * fs))
+        label_map = {0: "Sano", 1: "Click", 2: "Soplo"}
+        clase = label_map.get(int(majority), "Desconocido")
 
-        bpm_est = 0.0
-        if len(all_peaks) > 1:
-            intervals = np.diff(all_peaks) / fs
+        # ── BPM ──────────────────────────────────────────────────────────────
+        if len(iS1_idx) > 2:
+            intervals = np.diff(iS1_idx[:-1]) / fs
             bpm_est   = round(float(60.0 / np.mean(intervals)), 1)
-
-        s1_raw, s2_raw = split_peaks(all_peaks)
+        else:
+            bpm_est = 0.0
 
         # ── Downsample para frontend ──────────────────────────────────────────
-        step       = max(1, len(x) // MAX_POINTS)
-        t_ds, x_ds = ds(x,   t)
-        _,  env_ds  = ds(Env, t)
+        t_ds,  x_ds   = downsample(x,   t)
+        _,     env_ds = downsample(Env, t)
 
-        # indices de picos en el vector downsampleado
-        s1_plot = (s1_raw[s1_raw < len(t)] // step).tolist()
-        s2_plot = (s2_raw[s2_raw < len(t)] // step).tolist()
+        # Índices S1 en el vector downsampleado
+        step    = max(1, len(x) // MAX_POINTS)
+        s1_plot = [int(idx // step) for idx in iS1_idx[:-1]]
 
-        # ciclos para overlay (primeros 4)
+        # Primeros 4 ciclos para overlay
         cycles_overlay = []
-        for (s, e) in cycles[:4]:
+        for (s, e) in ciclos_ref[:4]:
             seg = x[s:e]
             cycles_overlay.append({
                 "t": (np.arange(len(seg)) / fs).tolist(),
@@ -169,31 +227,28 @@ def main():
             })
 
         # MFCC heatmap del primer ciclo
-        mfcc_matrix = []
-        if cycles:
-            s0, e0 = cycles[0]
+        mfcc_matrix_plot = []
+        if ciclos_ref:
+            s0, e0 = ciclos_ref[0]
             seg0   = x[s0:e0]
-            if len(seg0) >= 512:
-                m = librosa.feature.mfcc(y=seg0, sr=fs, n_mfcc=13,
-                                          n_fft=2048, hop_length=512)
-                mfcc_matrix = safe(m)
+            if len(seg0) >= int(0.012 * fs):
+                frame_len = int(0.025 * fs)
+                nfft      = max(512, 1 << (frame_len - 1).bit_length())
+                m = mfcc(seg0, samplerate=fs, numcep=Ncoef,
+                         winlen=0.025, winstep=0.01, nfft=nfft)
+                mfcc_matrix_plot = safe(m.T)  # transpuesto para heatmap
 
-        # stats MFCC globales
-        if len(feats) > 0:
-            mfcc_mean_g = safe(np.mean(feats[:, :13], axis=0))
-            mfcc_std_g  = safe(np.mean(feats[:, 13:], axis=0))
-        else:
-            mfcc_mean_g = [0] * 13
-            mfcc_std_g  = [0] * 13
+        # Stats MFCC globales
+        mfcc_arr    = np.array(MFCC_matrix)
+        mfcc_mean_g = safe(np.mean(mfcc_arr, axis=0)) if len(mfcc_arr) > 0 else [0]*13
+        mfcc_std_g  = safe(np.std(mfcc_arr,  axis=0)) if len(mfcc_arr) > 0 else [0]*13
 
-        # ── Respuesta con los nombres que espera pcg-dashboard.html ───────────
-        # Las etapas 1, 2, 3 y 4a no existen en classify.py,
-        # asi que devolvemos la señal disponible mas cercana en cada caso.
+        # ── Respuesta ────────────────────────────────────────────────────────
         response = {
             "status":     "success",
-            "class":      diag_class,
-            "confidence": diag_confidence,
-            "cycles":     diag_cycles,
+            "class":      clase,
+            "confidence": confidence,
+            "cycles":     int(len(labels)),
             "bpm":        bpm_est,
             "fs":         int(fs),
             "duration":   round(float(len(x) / fs), 2),
@@ -201,28 +256,21 @@ def main():
             "pipeline": {
                 "t": t_ds,
 
-                # Etapa 0 — señal normalizada (lo que realmente usa el modelo)
-                "stage_0_raw":         x_ds,
-
-                # Etapas 1-3 — classify.py no las calcula
-                # Mostramos la misma señal para que el dashboard no quede vacio
-                "stage_1_highpass":    x_ds,
-                "stage_2_denoised":    x_ds,
-                "stage_3_bandpass":    x_ds,
-
-                # Etapa 4 — solo Shannon existe en classify.py
-                "stage_4a_env_hilbert": env_ds,   # mismo que Shannon (unico disponible)
+                "stage_0_raw":          x_ds,
+                "stage_1_highpass":     x_ds,
+                "stage_2_denoised":     x_ds,
+                "stage_3_bandpass":     x_ds,
+                "stage_4a_env_hilbert": env_ds,
                 "stage_4b_env_shannon": env_ds,
 
-                # Etapas 5-6
                 "stage_5_s1_idxs": s1_plot,
-                "stage_5_s2_idxs": s2_plot,
+                "stage_5_s2_idxs": [],
+
                 "stage_6_cycles":  cycles_overlay,
 
-                # Etapa 7
                 "stage_7_mfcc_mean":   mfcc_mean_g,
                 "stage_7_mfcc_std":    mfcc_std_g,
-                "stage_7_mfcc_matrix": mfcc_matrix,
+                "stage_7_mfcc_matrix": mfcc_matrix_plot,
             }
         }
 

@@ -181,7 +181,7 @@ def main():
         file_path = sys.argv[1]
 
         # Cargar modelo PyCaret (busca modelo_pcg_final.pkl junto al script)
-        model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../models')
+        model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'models')
         model_name = os.path.join(model_dir, "modelo_pcg_final")
 
         with suppress_stdout():
