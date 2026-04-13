@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CardioAC — Historial de Pacientes</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+
+    .page-body {
+      flex: 1;
+      padding: 40px 28px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .page-header h1 { font-size: 1.8rem; }
+    .page-header p  { color: var(--text-muted); font-size: 0.875rem; margin-top: 4px; }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border-md);
+      border-radius: var(--radius-sm);
+      padding: 0 14px;
+      width: 280px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-bar:focus-within {
+      border-color: var(--red);
+      box-shadow: 0 0 0 3px var(--red-glow);
+    }
+
+    .search-bar input {
+      border: none;
+      background: transparent;
+      padding: 10px 0;
+      font-family: var(--font-body);
+      font-size: 0.875rem;
+      color: var(--text-primary);
+      outline: none;
+      width: 100%;
+    }
+
+    .search-bar input::placeholder { color: var(--text-muted); }
+
+    /* Estadísticas rápidas */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .stat-card .stat-val {
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .stat-card .stat-lbl {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    /* Acciones */
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 11px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-audio  { background: #e8f4fd; color: #1565c0; }
+    .btn-audio:hover  { background: #1565c0; color: #fff; }
+
+    .btn-pdf    { background: var(--red-light); color: var(--red); }
+    .btn-pdf:hover    { background: var(--red); color: #fff; }
+
+    .btn-visual { background: #f0eafd; color: #6b21a8; }
+    .btn-visual:hover { background: #6b21a8; color: #fff; }
+
+    .actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* Estados vacíos */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-state .icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .empty-state p { font-size: 0.875rem; }
+
+    @media (max-width: 640px) {
+      .page-body { padding: 24px 16px; }
+      .search-bar { width: 100%; }
+      .page-header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="/" class="navbar-brand">
+      <div class="navbar-brand-icon">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+      </div>
+      <span class="navbar-brand-name">CardioAC</span>
+    </a>
+    <div class="navbar-actions">
+      <a href="/" class="btn btn-ghost">← Nuevo análisis</a>
+      <a href="/logout" class="btn btn-danger-ghost">⏻ Salir</a>
+    </div>
+  </nav>
+
+  <!-- Contenido -->
+  <div class="page-body">
+
+    <div class="page-header anim-fade-up">
+      <div>
+        <h1>Historial de diagnósticos</h1>
+        <p>Todos los análisis cardíacos registrados en el sistema</p>
+      </div>
+      <div class="search-bar">
+        <span style="color:var(--text-muted);font-size:0.9rem">🔍</span>
+        <input type="text" id="buscador" placeholder="Buscar paciente…">
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row anim-fade-up anim-delay-1">
+      <div class="stat-card">
+        <div class="stat-val" id="statTotal">—</div>
+        <div class="stat-lbl">Total diagnósticos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val text-green" id="statNormal">—</div>
+        <div class="stat-lbl">Resultados normales</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val text-red" id="statAnomaly">—</div>
+        <div class="stat-lbl">Anomalías detectadas</div>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="card anim-fade-up anim-delay-2">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Paciente</th>
+              <th>Edad</th>
+              <th>Diagnóstico</th>
+              <th>Confianza</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tablaCuerpo"></tbody>
+        </table>
+      </div>
+
+      <div id="loadingState" class="empty-state">
+        <div class="icon">⏳</div>
+        <p>Cargando diagnósticos…</p>
+      </div>
+
+      <div id="emptyState" class="empty-state" style="display:none">
+        <div class="icon">🔍</div>
+        <p>No se encontraron pacientes con ese nombre.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let pacientesData = [];
+
+    fetch('/api/pacientes')
+      .then(r => r.json())
+      .then(data => {
+        pacientesData = data;
+        document.getElementById('loadingState').style.display = 'none';
+        actualizarStats(data);
+        renderTable(data);
+      })
+      .catch(() => {
+        document.getElementById('loadingState').innerHTML = '<div class="icon">⚠️</div><p>Error al cargar datos.</p>';
+      });
+
+    function actualizarStats(data) {
+      const normales  = data.filter(p => p.resultado_ia.toLowerCase().includes('sano') || p.resultado_ia.toLowerCase().includes('normal')).length;
+      const anomalias = data.length - normales;
+      document.getElementById('statTotal').textContent  = data.length;
+      document.getElementById('statNormal').textContent = normales;
+      document.getElementById('statAnomaly').textContent = anomalias;
+    }
+
+    function renderTable(data) {
+      const tbody = document.getElementById('tablaCuerpo');
+      tbody.innerHTML = '';
+
+      document.getElementById('emptyState').style.display = data.length === 0 ? 'block' : 'none';
+
+      data.forEach(fila => {
+        const tr    = document.createElement('tr');
+        const fecha = new Date(fila.fecha_analisis).toLocaleString('es-MX');
+        const esNormal = fila.resultado_ia.toLowerCase().includes('sano') || fila.resultado_ia.toLowerCase().includes('normal');
+        const badgeClass = esNormal ? 'badge-normal' : 'badge-anomaly';
+        const icono = esNormal ? '💚' : '⚠️';
+
+        const datosPDF = encodeURIComponent(JSON.stringify({
+          nombre: fila.nombre, edad: fila.edad, fecha,
+          diagnostico: fila.resultado_ia, confianza: fila.confianza, id: fila.id
+        }));
+
+        tr.innerHTML = `
+          <td style="color:var(--text-muted);font-size:0.82rem">${fecha}</td>
+          <td><strong>${fila.nombre}</strong></td>
+          <td>${fila.edad} años</td>
+          <td><span class="badge ${badgeClass}">${icono} ${fila.resultado_ia}</span></td>
+          <td><strong>${fila.confianza}%</strong></td>
+          <td>
+            <div class="actions-cell">
+              <a href="/ver-detalle?id=${fila.id}" class="action-btn btn-audio">🎧 Audio</a>
+              <button onclick="generarPDF('${datosPDF}')" class="action-btn btn-pdf">📄 PDF</button>
+              <a href="/dashboard?diagId=${fila.id}" class="action-btn btn-visual">📊 Pipeline</a>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('buscador').addEventListener('input', e => {
+      const termino = e.target.value.toLowerCase();
+      renderTable(pacientesData.filter(p => p.nombre.toLowerCase().includes(termino)));
+    });
+
+    function generarPDF(datosString) {
+      const { jsPDF } = window.jspdf;
+      const doc  = new jsPDF();
+      const datos = JSON.parse(decodeURIComponent(datosString));
+
+      doc.setFont("helvetica");
+      doc.setFillColor(192, 57, 43);
+      doc.rect(0, 0, 210, 32, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(20);
+      doc.text("Reporte de Análisis Cardíaco", 105, 21, null, null, "center");
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(11);
+      doc.text(`Fecha: ${datos.fecha}`, 20, 48);
+      doc.setDrawColor(220);
+      doc.line(20, 53, 190, 53);
+
+      doc.setFontSize(12);
+      doc.text("DATOS DEL PACIENTE", 20, 63);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Nombre: ${datos.nombre}`, 20, 73);
+      doc.text(`Edad: ${datos.edad} años`, 20, 81);
+      doc.text(`ID: #${datos.id}`, 130, 73);
+
+      doc.setFont("helvetica", "normal");
+      doc.rect(20, 96, 170, 60);
+      doc.setFillColor(245, 244, 240);
+      doc.rect(21, 97, 168, 10, 'F');
+      doc.setFontSize(11);
+      doc.text("RESULTADOS DEL ANÁLISIS IA", 105, 104, null, null, "center");
+
+      doc.setFontSize(11);
+      doc.text("Diagnóstico:", 30, 120);
+      doc.setTextColor(datos.diagnostico.toLowerCase().includes('sano') || datos.diagnostico.toLowerCase().includes('normal') ? 40 : 192,
+                       datos.diagnostico.toLowerCase().includes('sano') || datos.diagnostico.toLowerCase().includes('normal') ? 167 : 57,
+                       datos.diagnostico.toLowerCase().includes('sano') || datos.diagnostico.toLowerCase().includes('normal') ? 69 : 43);
+      doc.setFontSize(15);
+      doc.setFont("helvetica", "bold");
+      doc.text(datos.diagnostico.toUpperCase(), 30, 132);
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.text("Confianza:", 120, 120);
+      doc.setFontSize(15);
+      doc.text(`${datos.confianza}%`, 120, 132);
+
+      doc.setFontSize(9);
+      doc.setTextColor(140);
+      doc.text("Este reporte fue generado automáticamente. No sustituye el criterio médico.", 105, 265, null, null, "center");
+      doc.text("CardioAC — Sistema de Diagnóstico Cardíaco con IA", 105, 272, null, null, "center");
+
+      doc.save(`Reporte_${datos.nombre.replace(/\s+/g,'_')}_${datos.id}.pdf`);
+    }
+  </script>
+
+</body>
+</html>
