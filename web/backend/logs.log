@@ -1457,3 +1457,115 @@ Alternately, you can install this by running `pip install pycaret[models]`
 2026-04-12 18:11:00,758:INFO:Preloading libraries
 2026-04-12 18:11:00,760:INFO:Set up data.
 2026-04-12 18:11:00,786:INFO:Set up index.
+2026-04-12 18:28:46,521:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:28:46,523:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:28:46,523:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:28:46,523:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:28:52,069:INFO:Initializing load_model()
+2026-04-12 18:28:52,069:INFO:load_model(model_name=C:\Users\emigo\OneDrive\Documentos\Servicio Social\clasificador-ac\pcg_processing\classification\..\..\models\modelo_pcg_final, platform=None, authentication=None, verbose=True)
+2026-04-12 18:29:01,107:INFO:Initializing predict_model()
+2026-04-12 18:29:01,107:INFO:predict_model(self=<pycaret.classification.oop.ClassificationExperiment object at 0x00000186D9DC8A10>, estimator=Pipeline(memory=Memory(location=None),
+         steps=[('numerical_imputer',
+                 TransformerWrapper(include=['MFCC_1', 'MFCC_2', 'MFCC_3',
+                                             'MFCC_4', 'MFCC_5', 'MFCC_6',
+                                             'MFCC_7', 'MFCC_8', 'MFCC_9',
+                                             'MFCC_10', 'MFCC_11', 'MFCC_12',
+                                             'MFCC_13', 'RMS'],
+                                    transformer=SimpleImputer())),
+                ('categorical_imputer',
+                 TransformerWrapper(include=[],
+                                    transformer=SimpleImputer(strategy='most_frequent'))),
+                ('trained_model',
+                 LogisticRegression(max_iter=1000, random_state=123))]), probability_threshold=None, encoded_labels=False, raw_score=False, round=4, verbose=True, ml_usecase=None, preprocess=True, encode_labels=<function _SupervisedExperiment.predict_model.<locals>.encode_labels at 0x00000186D9C053A0>)
+2026-04-12 18:29:01,107:INFO:Checking exceptions
+2026-04-12 18:29:01,107:INFO:Preloading libraries
+2026-04-12 18:29:01,116:INFO:Set up data.
+2026-04-12 18:29:01,130:INFO:Set up index.
+2026-04-12 18:29:21,714:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:29:21,714:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:29:21,723:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:29:21,723:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:29:27,188:INFO:Initializing load_model()
+2026-04-12 18:29:27,188:INFO:load_model(model_name=C:\Users\emigo\OneDrive\Documentos\Servicio Social\clasificador-ac\pcg_processing\classification\..\..\models\modelo_pcg_final, platform=None, authentication=None, verbose=True)
+2026-04-12 18:29:35,526:INFO:Initializing predict_model()
+2026-04-12 18:29:35,526:INFO:predict_model(self=<pycaret.classification.oop.ClassificationExperiment object at 0x0000014D21790290>, estimator=Pipeline(memory=Memory(location=None),
+         steps=[('numerical_imputer',
+                 TransformerWrapper(include=['MFCC_1', 'MFCC_2', 'MFCC_3',
+                                             'MFCC_4', 'MFCC_5', 'MFCC_6',
+                                             'MFCC_7', 'MFCC_8', 'MFCC_9',
+                                             'MFCC_10', 'MFCC_11', 'MFCC_12',
+                                             'MFCC_13', 'RMS'],
+                                    transformer=SimpleImputer())),
+                ('categorical_imputer',
+                 TransformerWrapper(include=[],
+                                    transformer=SimpleImputer(strategy='most_frequent'))),
+                ('trained_model',
+                 LogisticRegression(max_iter=1000, random_state=123))]), probability_threshold=None, encoded_labels=False, raw_score=False, round=4, verbose=True, ml_usecase=None, preprocess=True, encode_labels=<function _SupervisedExperiment.predict_model.<locals>.encode_labels at 0x0000014D215C53A0>)
+2026-04-12 18:29:35,527:INFO:Checking exceptions
+2026-04-12 18:29:35,527:INFO:Preloading libraries
+2026-04-12 18:29:35,527:INFO:Set up data.
+2026-04-12 18:29:35,536:INFO:Set up index.
+2026-04-12 18:31:41,196:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:31:41,196:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:31:41,196:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:31:41,196:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:31:45,732:INFO:Initializing load_model()
+2026-04-12 18:31:45,732:INFO:load_model(model_name=C:\Users\emigo\OneDrive\Documentos\Servicio Social\clasificador-ac\pcg_processing\classification\..\..\models\modelo_pcg_final, platform=None, authentication=None, verbose=True)
+2026-04-12 18:32:01,793:INFO:Initializing predict_model()
+2026-04-12 18:32:01,794:INFO:predict_model(self=<pycaret.classification.oop.ClassificationExperiment object at 0x000001E0978AA210>, estimator=Pipeline(memory=Memory(location=None),
+         steps=[('numerical_imputer',
+                 TransformerWrapper(include=['MFCC_1', 'MFCC_2', 'MFCC_3',
+                                             'MFCC_4', 'MFCC_5', 'MFCC_6',
+                                             'MFCC_7', 'MFCC_8', 'MFCC_9',
+                                             'MFCC_10', 'MFCC_11', 'MFCC_12',
+                                             'MFCC_13', 'RMS'],
+                                    transformer=SimpleImputer())),
+                ('categorical_imputer',
+                 TransformerWrapper(include=[],
+                                    transformer=SimpleImputer(strategy='most_frequent'))),
+                ('trained_model',
+                 LogisticRegression(max_iter=1000, random_state=123))]), probability_threshold=None, encoded_labels=False, raw_score=False, round=4, verbose=True, ml_usecase=None, preprocess=True, encode_labels=<function _SupervisedExperiment.predict_model.<locals>.encode_labels at 0x000001E096B553A0>)
+2026-04-12 18:32:01,795:INFO:Checking exceptions
+2026-04-12 18:32:01,795:INFO:Preloading libraries
+2026-04-12 18:32:01,795:INFO:Set up data.
+2026-04-12 18:32:01,814:INFO:Set up index.
+2026-04-12 18:36:51,362:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:36:51,362:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:36:51,362:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:36:51,362:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2026-04-12 18:36:56,295:INFO:Initializing load_model()
+2026-04-12 18:36:56,295:INFO:load_model(model_name=C:\Users\emigo\OneDrive\Documentos\Servicio Social\clasificador-ac\pcg_processing\classification\..\..\models\modelo_pcg_final, platform=None, authentication=None, verbose=True)
+2026-04-12 18:37:11,108:INFO:Initializing predict_model()
+2026-04-12 18:37:11,108:INFO:predict_model(self=<pycaret.classification.oop.ClassificationExperiment object at 0x000002325E9E9410>, estimator=Pipeline(memory=Memory(location=None),
+         steps=[('numerical_imputer',
+                 TransformerWrapper(include=['MFCC_1', 'MFCC_2', 'MFCC_3',
+                                             'MFCC_4', 'MFCC_5', 'MFCC_6',
+                                             'MFCC_7', 'MFCC_8', 'MFCC_9',
+                                             'MFCC_10', 'MFCC_11', 'MFCC_12',
+                                             'MFCC_13', 'RMS'],
+                                    transformer=SimpleImputer())),
+                ('categorical_imputer',
+                 TransformerWrapper(include=[],
+                                    transformer=SimpleImputer(strategy='most_frequent'))),
+                ('trained_model',
+                 LogisticRegression(max_iter=1000, random_state=123))]), probability_threshold=None, encoded_labels=False, raw_score=False, round=4, verbose=True, ml_usecase=None, preprocess=True, encode_labels=<function _SupervisedExperiment.predict_model.<locals>.encode_labels at 0x000002325DC853A0>)
+2026-04-12 18:37:11,108:INFO:Checking exceptions
+2026-04-12 18:37:11,108:INFO:Preloading libraries
+2026-04-12 18:37:11,108:INFO:Set up data.
+2026-04-12 18:37:11,121:INFO:Set up index.

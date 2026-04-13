@@ -14,7 +14,6 @@ require('dotenv').config();
 
 // ── Rutas de scripts Python ──────────────────────────
 const PY_CLASIFICAR    = path.join(__dirname, '../../pcg_processing/classification/arboldeprediccion.py');
-const PY_VISUAL        = path.join(__dirname, '../../pcg_processing/classification/classify_visual.py');
 const PY_EXTRACT       = path.join(__dirname, '../../pcg_processing/preprocessing/extract_features.py');
 const PY_RETRAIN_EVAL  = path.join(__dirname, '../../pcg_processing/training/retrain_eval.py');
 const PY_TRAIN         = path.join(__dirname, '../../pcg_processing/training/train.py');
@@ -395,9 +394,11 @@ app.post('/upload', upload.single('cancion'), (req, res) => {
             }
 
             const pid = resP.insertId;
-            const sqlDiag = `INSERT INTO diagnosticos (paciente_id, ruta_audio, resultado_ia, confianza, ciclos_detectados) VALUES (?, ?, ?, ?, ?)`;
             
-            db.query(sqlDiag, [pid, req.file.path, result.class, result.confidence, result.cycles], (err, resD) => {
+            
+            const datosVisuales = JSON.stringify(result);
+            const sqlDiag = `INSERT INTO diagnosticos (paciente_id, ruta_audio, resultado_ia, confianza, ciclos_detectados, datos_visuales) VALUES (?, ?, ?, ?, ?, ?)`;
+            db.query(sqlDiag, [pid, req.file.path, result.class, result.confidence, result.cycles, datosVisuales], (err, resD) => {
                 if (err) console.error("DB Error Diagnóstico:", err);
 
                 // HTML RESPUESTA
@@ -811,7 +812,13 @@ app.use((err, req, res, next) => {
     next();
 });
 
-
+app.get('/api/diagnostico/:id/visual', requireLogin, (req, res) => {
+    db.query('SELECT datos_visuales FROM diagnosticos WHERE id = ?', [req.params.id], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!results[0]?.datos_visuales) return res.status(404).json({ error: 'Sin datos visuales' });
+        res.json(JSON.parse(results[0].datos_visuales));
+    });
+});
 
 const uploadVisual = multer({
     storage: multer.memoryStorage(),   // No guarda en disco permanente
@@ -824,66 +831,6 @@ const uploadVisual = multer({
     limits: { fileSize: 10 * 1024 * 1024 }
 });
  
-app.post('/api/analyze-visual', uploadVisual.single('audio'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'Falta archivo de audio.' });
- 
-    // 1. Guardar temporalmente para que Python pueda leerlo
-    const tmpDir  = path.join(__dirname, 'uploads', 'tmp');
-    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
- 
-    const tmpName = `visual_${Date.now()}_${req.file.originalname}`;
-    const tmpPath = path.join(tmpDir, tmpName);
- 
-    fs.writeFileSync(tmpPath, req.file.buffer);
- 
-    // 2. Resolver ejecutable Python (igual que en /upload)
-    const pythonExecutable = getPythonExe();
- 
-    const scriptPath = PY_VISUAL;
-    console.log(`[Visual] Python: ${pythonExecutable} | Script: ${scriptPath}`);
- 
-    const pythonProcess = spawn(pythonExecutable, [scriptPath, tmpPath]);
- 
-    let outputData = '';
-    let errorData  = '';
- 
-    pythonProcess.stdout.on('data', d => outputData += d.toString());
-    pythonProcess.stderr.on('data', d => {
-        errorData += d.toString();
-        console.error(`[PyVisual LOG]: ${d.toString()}`);
-    });
- 
-    pythonProcess.on('error', err => {
-        errorData = `No se pudo iniciar Python: ${err.message}`;
-    });
- 
-    pythonProcess.on('close', code => {
-        // Limpiar archivo temporal
-        try { fs.unlinkSync(tmpPath); } catch (_) {}
- 
-        if (code !== 0 || !outputData) {
-            return res.status(500).json({
-                error: 'Error en el análisis Python.',
-                details: errorData || 'Sin datos de salida.'
-            });
-        }
- 
-        let result;
-        try {
-            result = JSON.parse(outputData.trim());
-        } catch (e) {
-            console.error('[Visual] JSON parse error:', outputData.slice(0, 300));
-            return res.status(500).json({ error: 'Respuesta JSON inválida del script.' });
-        }
- 
-        if (result.status === 'error') {
-            return res.status(500).json({ error: result.message });
-        }
- 
-        // Devolver JSON completo al dashboard
-        res.json(result);
-    });
-});
  
 // ============================================================
 // RUTA HTML: /dashboard

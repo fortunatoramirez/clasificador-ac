@@ -217,26 +217,33 @@ const STAGES=['Cargando audio','Filtro Pasa-Altas','Denoising Espectral','Filtro
 const urlParams=new URLSearchParams(window.location.search);
 const diagId=urlParams.get('diagId');
 
-window.addEventListener('DOMContentLoaded',()=>{
-  if(!diagId){
-    $('centerState').innerHTML=`<div class="big">🔗</div><p>ACCEDE DESDE EL HISTORIAL DE PACIENTES</p><p class="sub">Abre un diagnóstico y pulsa "📊 Ver Pipeline de Señal"</p>`;
+window.addEventListener('DOMContentLoaded', () => {
+  if (!diagId) {
+    $('centerState').innerHTML = `<div class="big">🔗</div><p>ACCEDE DESDE EL HISTORIAL DE PACIENTES</p><p class="sub">Abre un diagnóstico y pulsa "📊 Ver Pipeline de Señal"</p>`;
     return;
   }
+
+  // Primero cargamos datos del diagnóstico (nombre, etc.)
   fetch(`/api/diagnostico/${diagId}`)
-    .then(r=>r.json())
-    .then(diag=>{
-      $('chipNombre').textContent=diag.nombre||'—';
-      $('patientChip').style.display='flex';
-      $('centerState').style.display='none';
-      return fetch(diag.url_web)
-        .then(r=>r.blob())
-        .then(blob=>{
-          const ext=diag.url_web.split('.').pop()||'wav';
-          iniciarAnalisis(new File([blob],`audio_${diagId}.${ext}`,{type:blob.type}));
-        });
+    .then(r => r.json())
+    .then(diag => {
+      $('chipNombre').textContent = diag.nombre || '—';
+      $('patientChip').style.display = 'flex';
+      $('centerState').style.display = 'none';
+      showProgress();
+
+      // Ahora leemos los datos visuales ya guardados en la BD
+      return fetch(`/api/diagnostico/${diagId}/visual`);
     })
-    .catch(err=>{
-      $('centerState').innerHTML=`<div class="big">⚠️</div><p>ERROR AL CARGAR</p><p class="sub">${err.message}</p>`;
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then(data => setTimeout(() => renderDashboard(data), 500))
+    .catch(err => {
+      $('progressWrapper').style.display = 'none';
+      $('centerState').innerHTML = `<div class="big">⚠️</div><p>ERROR AL CARGAR</p><p class="sub">${err.message}</p>`;
+      $('centerState').style.display = 'block';
     });
 });
 
@@ -262,19 +269,7 @@ function showProgress(){
   },300);
 }
 
-/* ── ANÁLISIS ── */
-function iniciarAnalisis(file){
-  showProgress();
-  const fd=new FormData();fd.append('audio',file);
-  fetch('/api/analyze-visual',{method:'POST',body:fd})
-    .then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json();})
-    .then(data=>setTimeout(()=>renderDashboard(data),500))
-    .catch(err=>{
-      $('progressWrapper').style.display='none';
-      $('centerState').innerHTML=`<div class="big">⚠️</div><p>ERROR EN EL ANÁLISIS</p><p class="sub">${err.message}</p>`;
-      $('centerState').style.display='block';
-    });
-}
+
 
 /* ── RENDER ── */
 function renderDashboard(data){
