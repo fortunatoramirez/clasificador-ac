@@ -4,3 +4,4 @@ uploads/
 uploads_tmp/
 .venv/
 venv/
+*.log
