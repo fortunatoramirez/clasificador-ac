@@ -1,6 +1,5 @@
 # build_dataset.py
-# Corre esto UNA vez (o cada vez que agregues audios nuevos) para regenerar
-# dataset.xlsx, ya con la columna "archivo" que faltaba.
+
 
 import os
 import glob
