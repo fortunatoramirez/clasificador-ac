@@ -9,7 +9,7 @@ import librosa
 import pandas as pd
 from scipy.signal import butter, filtfilt
 from python_speech_features import mfcc
-from pycaret.classification import load_model, predict_model
+import joblib
 
 warnings.filterwarnings("ignore")
 
@@ -165,35 +165,39 @@ def main():
         if len(sys.argv) < 2:
             raise Exception("No se recibió la ruta del archivo")
 
-        file_path  = sys.argv[1]
-        model_dir  = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'models')
-        model_name = os.path.join(model_dir, "modelo_pcg_final")
+        file_path     = sys.argv[1]
+        model_dir     = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'models')
+        model_path    = os.path.join(model_dir, "modelo_pcg_soplo_rf.joblib")
+        metadata_path = os.path.join(model_dir, "modelo_pcg_soplo_rf_metadata.json")
 
-        with suppress_stdout():
-            modelo = load_model(model_name)
+        modelo = joblib.load(model_path)
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        feature_cols = metadata['feature_cols']
+        umbral       = metadata['umbral_decision']
+        label_map    = {int(k): v for k, v in metadata['clases'].items()}
 
         processor = HeartSignalProcessor()
 
         # ── Señal ────────────────────────────────────────────────────────────
-        x, fs, t          = processor.preprocess_audio(file_path)
-        Env               = processor.compute_shannon_envelope(x, fs)
-        iS1_idx, ciclos_ref = processor.detect_cycles(Env, x, t, fs)
+        x, fs, t             = processor.preprocess_audio(file_path)
+        Env                  = processor.compute_shannon_envelope(x, fs)
+        iS1_idx, ciclos_ref  = processor.detect_cycles(Env, x, t, fs)
         features, MFCC_matrix = processor.extract_features(x, fs, iS1_idx)
 
         # ── Clasificación ────────────────────────────────────────────────────
         Ncoef   = 13
         df_cols = [f"MFCC_{i+1}" for i in range(Ncoef)] + ["RMS"]
         df      = pd.DataFrame(features, columns=df_cols)
+        df      = df[feature_cols]
 
-        with suppress_stdout():
-            pred = predict_model(modelo, data=df)
-        labels = pred["prediction_label"].values
+        idx_soplo  = list(modelo.classes_).index(2)
+        prob_soplo = modelo.predict_proba(df)[:, idx_soplo]
+        labels     = np.where(prob_soplo >= umbral, 2, 0)
 
         unique, counts = np.unique(labels, return_counts=True)
         majority   = unique[np.argmax(counts)]
         confidence = round((np.max(counts) / len(labels)) * 100, 2)
-
-        label_map = {0: "Sano", 1: "Click", 2: "Soplo"}
         clase = label_map.get(int(majority), "Desconocido")
 
         # ── BPM ──────────────────────────────────────────────────────────────
@@ -210,7 +214,6 @@ def main():
         step    = max(1, len(x) // MAX_POINTS)
         s1_plot = [int(idx // step) for idx in iS1_idx[:-1]]
 
-        # Primeros 4 ciclos para overlay
         cycles_overlay = []
         for (s, e) in ciclos_ref[:4]:
             seg = x[s:e]
@@ -219,11 +222,10 @@ def main():
                 "y": safe(seg)
             })
 
-        # MFCC heatmap del primer ciclo
         mfcc_matrix_plot = []
         if ciclos_ref:
-            s0, e0    = ciclos_ref[0]
-            seg0      = x[s0:e0]
+            s0, e0 = ciclos_ref[0]
+            seg0   = x[s0:e0]
             if len(seg0) >= int(0.012 * fs):
                 frame_len = int(0.025 * fs)
                 nfft      = max(512, 1 << (frame_len - 1).bit_length())
@@ -231,12 +233,10 @@ def main():
                          winlen=0.025, winstep=0.01, nfft=nfft)
                 mfcc_matrix_plot = safe(m.T)
 
-        # Stats MFCC globales
         mfcc_arr    = np.array(MFCC_matrix)
         mfcc_mean_g = safe(np.mean(mfcc_arr, axis=0)) if len(mfcc_arr) > 0 else [0]*13
         mfcc_std_g  = safe(np.std(mfcc_arr,  axis=0)) if len(mfcc_arr) > 0 else [0]*13
 
-        # ── Respuesta completa ────────────────────────────────────────────────
         response = {
             "status":     "success",
             "class":      clase,
@@ -245,22 +245,17 @@ def main():
             "bpm":        bpm_est,
             "fs":         int(fs),
             "duration":   round(float(len(x) / fs), 2),
-
             "pipeline": {
                 "t": t_ds,
-
                 "stage_0_raw":          x_ds,
                 "stage_1_highpass":     x_ds,
                 "stage_2_denoised":     x_ds,
                 "stage_3_bandpass":     x_ds,
                 "stage_4a_env_hilbert": env_ds,
                 "stage_4b_env_shannon": env_ds,
-
                 "stage_5_s1_idxs": s1_plot,
                 "stage_5_s2_idxs": [],
-
                 "stage_6_cycles":  cycles_overlay,
-
                 "stage_7_mfcc_mean":   mfcc_mean_g,
                 "stage_7_mfcc_std":    mfcc_std_g,
                 "stage_7_mfcc_matrix": mfcc_matrix_plot,
