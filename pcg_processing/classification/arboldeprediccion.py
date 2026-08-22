@@ -267,6 +267,6 @@ def main():
 
     print(json.dumps(response))
 
-
+#python arboldeprediccion.py "C:\Users\emigo\OneDrive\Documentos\Servicio Social\the-circor-digiscope-phonocardiogram-dataset-1.0.3\the-circor-digiscope-phonocardiogram-dataset-1.0.3\training_data\9979_AV.wav" | python -c "import json,sys; d=json.load(sys.stdin); d.pop('pipeline',None); print(json.dumps(d, indent=2, ensure_ascii=False))"
 if __name__ == "__main__":
     main()
