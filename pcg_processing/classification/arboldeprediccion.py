@@ -200,6 +200,16 @@ def main():
         confidence = round((np.max(counts) / len(labels)) * 100, 2)
         clase = label_map.get(int(majority), "Desconocido")
 
+        # ── Confiabilidad del resultado ─────────────────────────────────────
+        MIN_CICLOS_CONFIABLE = 5
+        n_ciclos = len(labels)
+        confiable = n_ciclos >= MIN_CICLOS_CONFIABLE
+        advertencia = None
+        if not confiable:
+            advertencia = (f"Solo se detectaron {n_ciclos} ciclo(s) (minimo recomendado: "
+                            f"{MIN_CICLOS_CONFIABLE}). La clasificacion, el BPM y el porcentaje "
+                            f"de confianza pueden no ser representativos de la grabacion completa.")
+
         # ── BPM ──────────────────────────────────────────────────────────────
         if len(iS1_idx) > 2:
             intervals = np.diff(iS1_idx[:-1]) / fs
@@ -241,6 +251,8 @@ def main():
             "status":     "success",
             "class":      clase,
             "confidence": confidence,
+            "confiable":   confiable,
+            "advertencia": advertencia,
             "cycles":     int(len(labels)),
             "bpm":        bpm_est,
             "fs":         int(fs),
