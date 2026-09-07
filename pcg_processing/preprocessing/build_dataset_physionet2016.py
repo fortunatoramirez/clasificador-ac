@@ -10,7 +10,7 @@ from extract_features import HeartSignalProcessor
 BASE_DIR = r"C:\Users\emigo\OneDrive\Documentos\Servicio Social\classification-of-heart-sound-recordings\classification-of-heart-sound-recordings-the-physionet-computing-in-cardiology-challenge-2016-1.0.0"
 CARPETAS = ['training-a', 'training-b', 'training-c', 'training-d', 'training-e', 'training-f']
 
-MAX_ARCHIVOS_POR_CARPETA = 20  # empieza chico para confirmar que corre bien
+MAX_ARCHIVOS_POR_CARPETA = None  # empieza chico para confirmar que corre bien
 
 def main():
     proc = HeartSignalProcessor()
@@ -51,10 +51,24 @@ def main():
                 fila["archivo"] = f"{carpeta}_{nombre}"
                 fila["paciente_id"] = f"{carpeta}_{nombre}"  # 1 grabacion = 1 sujeto en este dataset
                 fila["fuente"] = "PhysioNet2016"
+                fila["duracion_s"] = round(len(x) / fs, 2)
                 todas_las_filas.append(fila)
             print(f"  [ok] {nombre}: {len(features)} ciclos")
 
     df = pd.DataFrame(todas_las_filas)
+    
+
+    UMBRAL_CICLOS_POR_SEGUNDO = 0.15  # bastante permisivo, dado que hasta lo "bueno" ronda 0.24-0.40
+    resumen = df.groupby('archivo').agg(ciclos=('MFCC_1', 'size'), duracion=('duracion_s', 'first'))
+    resumen['ciclos_por_segundo'] = resumen['ciclos'] / resumen['duracion']
+    archivos_confiables = resumen[resumen['ciclos_por_segundo'] >= UMBRAL_CICLOS_POR_SEGUNDO].index
+
+    n_antes = df['archivo'].nunique()
+    df = df[df['archivo'].isin(archivos_confiables)]
+    print(f"\nFiltro de calidad (por densidad, no conteo fijo): {df['archivo'].nunique()} de {n_antes} sujetos")
+
+    df.to_excel("dataset_physionet2016.xlsx", index=False)
+    print(f"Listo: {df.shape[0]} filas de {df['paciente_id'].nunique()} sujetos -> dataset_physionet2016.xlsx")
     df.to_excel("dataset_physionet2016.xlsx", index=False)
     print(f"\nListo: {df.shape[0]} filas de {df['paciente_id'].nunique()} sujetos -> dataset_physionet2016.xlsx")
 
