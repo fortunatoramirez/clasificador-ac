@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PCG Pipeline · Análisis de Fonocardiograma</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#04070f; --bg-card:#0b1120; --bg-card2:#0f1929;
+  --border:#1a2e4a; --border-glow:#1e4a8a;
+  --cyan:#00e5ff; --green:#00ff9d; --red:#ff4d6d;
+  --yellow:#ffd166; --purple:#c77dff; --blue:#4895ef;
+  --text-primary:#e8f4fd; --text-secondary:#6b8cae; --text-muted:#334155;
+  --font-mono:'Space Mono',monospace; --font-sans:'Syne',sans-serif;
+  --radius:10px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text-primary);font-family:var(--font-sans);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+.shell{position:relative;z-index:1;max-width:1440px;margin:0 auto;padding:0 28px 60px}
+
+/* HEADER */
+header{display:flex;align-items:center;justify-content:space-between;padding:24px 0 20px;border-bottom:1px solid var(--border);margin-bottom:32px;flex-wrap:wrap;gap:16px}
+.brand{display:flex;align-items:center;gap:14px}
+.brand-icon{width:44px;height:44px;border:1.5px solid var(--cyan);border-radius:50%;display:flex;align-items:center;justify-content:center;animation:pulse-ring 3s ease-in-out infinite}
+@keyframes pulse-ring{0%,100%{box-shadow:0 0 10px rgba(0,229,255,.3)}50%{box-shadow:0 0 28px rgba(0,229,255,.7)}}
+.brand-icon svg{width:22px;fill:none;stroke:var(--cyan);stroke-width:1.8}
+.brand-text h1{font-size:1.2rem;font-weight:800;letter-spacing:.06em;line-height:1}
+.brand-text p{font-family:var(--font-mono);font-size:.65rem;color:var(--cyan);letter-spacing:.15em;margin-top:3px}
+.patient-chip{display:none;align-items:center;gap:10px;background:var(--bg-card);border:1px solid var(--border-glow);border-radius:50px;padding:8px 18px;font-family:var(--font-mono);font-size:.72rem;color:var(--text-secondary)}
+.patient-chip span{color:var(--cyan);font-weight:700}
+
+/* PROGRESS */
+.progress-wrapper{display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;margin-bottom:32px}
+.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.progress-header span{font-family:var(--font-mono);font-size:.72rem;color:var(--cyan)}
+.progress-track{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px;width:0%;transition:width .4s ease}
+.stage-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.stage-pill{font-family:var(--font-mono);font-size:.62rem;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--text-muted);letter-spacing:.08em;transition:all .3s ease}
+.stage-pill.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,229,255,.06)}
+.stage-pill.done{border-color:var(--green);color:var(--green);background:rgba(0,255,157,.06)}
+
+/* BANNER */
+.diag-banner{border-radius:14px;padding:24px 28px;margin-bottom:32px;display:none;align-items:center;gap:20px;flex-wrap:wrap}
+.diag-banner.normal{background:linear-gradient(135deg,rgba(0,255,157,.07),rgba(0,229,255,.04));border:1px solid rgba(0,255,157,.3)}
+.diag-banner.anomaly{background:linear-gradient(135deg,rgba(255,77,109,.08),rgba(255,166,0,.04));border:1px solid rgba(255,77,109,.3)}
+.diag-icon{font-size:2.8rem}
+.diag-info h2{font-size:1.6rem;font-weight:800;letter-spacing:.04em}
+.diag-info p{font-family:var(--font-mono);font-size:.72rem;color:var(--text-secondary);margin-top:4px}
+.diag-stats{margin-left:auto;display:flex;gap:24px;flex-wrap:wrap}
+.stat-box{text-align:center}
+.stat-box .val{font-size:1.5rem;font-weight:800;font-family:var(--font-mono);line-height:1}
+.stat-box .lbl{font-size:.6rem;letter-spacing:.12em;color:var(--text-secondary);margin-top:3px;text-transform:uppercase}
+
+/* PIPELINE */
+#pipelineSection{display:none}
+.section-title{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.2em;color:var(--text-secondary);text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.section-title::before{content:'';display:block;width:18px;height:1px;background:var(--cyan)}
+.charts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,640px),1fr));gap:20px;margin-bottom:32px}
+.chart-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.chart-card:hover{border-color:var(--border-glow);box-shadow:0 0 24px rgba(30,74,138,.3)}
+.chart-card-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 0}
+.chart-label{display:flex;align-items:center;gap:8px}
+.stage-badge{font-family:var(--font-mono);font-size:.58rem;background:var(--border);color:var(--text-secondary);padding:2px 7px;border-radius:4px;letter-spacing:.1em}
+.chart-card-header h3{font-size:.85rem;font-weight:700}
+.chart-desc{padding:4px 18px 10px;font-size:.68rem;color:var(--text-secondary);font-family:var(--font-mono)}
+.chart-body{padding:0 14px 14px}
+.chart-body canvas{max-height:180px}
+.chart-card.full{grid-column:1/-1}
+.chart-card.full .chart-body canvas{max-height:220px}
+.legend-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:0 18px 12px}
+.legend-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+.legend-item{font-family:var(--font-mono);font-size:.62rem;color:var(--text-secondary);display:flex;align-items:center}
+.cycles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:32px}
+
+/* CENTER STATE */
+.center-state{text-align:center;padding:80px 20px;color:var(--text-muted)}
+.center-state .big{font-size:3rem;margin-bottom:14px}
+.center-state p{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.1em}
+.center-state .sub{margin-top:8px;font-size:.65rem;color:var(--text-muted)}
+
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border-glow);border-radius:3px}
+@media(max-width:600px){.shell{padding:0 14px 40px}.diag-stats{margin-left:0}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24"><polyline points="2 12 6 4 9 14 13 6 16 16 19 10 22 12"/></svg>
+      </div>
+      <div class="brand-text"><h1>PCG ANALYZER</h1><p>PIPELINE · SEÑAL CARDÍACA</p></div>
+    </div>
+    <div class="patient-chip" id="patientChip">Paciente: <span id="chipNombre">—</span></div>
+  </header>
+
+  <div class="progress-wrapper" id="progressWrapper">
+    <div class="progress-header">
+      <span id="progressLabel">Iniciando análisis…</span>
+      <span id="progressPct">0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="stage-list" id="stagePills"></div>
+  </div>
+
+  <div class="diag-banner" id="diagBanner">
+    <div class="diag-icon" id="diagIcon"></div>
+    <div class="diag-info"><h2 id="diagTitle"></h2><p id="diagSub"></p></div>
+    <div class="diag-stats" id="diagStats"></div>
+  </div>
+
+  <div id="pipelineSection">
+    <p class="section-title">Cadena de Filtrado de Señal</p>
+    <div class="charts-grid">
+      <div class="chart-card full">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 0</span><h3>Señal Cruda</h3></div></div>
+        <p class="chart-desc">Audio normalizado a [−1, 1]. Sin procesamiento.</p>
+        <div class="chart-body"><canvas id="chartRaw"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 1</span><h3>Filtro Pasa-Altas (20 Hz)</h3></div></div>
+        <p class="chart-desc">Elimina DC y ruido de baja frecuencia.</p>
+        <div class="chart-body"><canvas id="chartHP"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 2</span><h3>Denoising Espectral</h3></div></div>
+        <p class="chart-desc">Sustracción espectral STFT · −12 dB ruido de fondo.</p>
+        <div class="chart-body"><canvas id="chartDen"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 3</span><h3>Filtro Pasa-Banda (25–150 Hz)</h3></div></div>
+        <p class="chart-desc">Banda clínica: conserva S1, S2 y soplos relevantes.</p>
+        <div class="chart-body"><canvas id="chartBP"></canvas></div>
+      </div>
+    </div>
+
+    <p class="section-title">Cálculo de Envolvente</p>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 4A</span><h3>Envolvente de Hilbert</h3></div></div>
+        <p class="chart-desc">Señal analítica — amplitud instantánea del PCG.</p>
+        <div class="chart-body"><canvas id="chartEnvH"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 4B</span><h3>Envolvente de Shannon</h3></div></div>
+        <p class="chart-desc">−p·log(p): amplifica ruidos débiles, suprime artefactos.</p>
+        <div class="chart-body"><canvas id="chartEnvS"></canvas></div>
+      </div>
+    </div>
+
+    <p class="section-title">Detección de Ruidos Cardíacos S1 / S2</p>
+    <div class="charts-grid">
+      <div class="chart-card full">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 5</span><h3>Segmentación S1 · S2</h3></div></div>
+        <p class="chart-desc"><b style="color:var(--cyan)">◆ S1</b> = cierre válvulas AV &nbsp;|&nbsp; <b style="color:var(--red)">▲ S2</b> = cierre válvulas semilunares</p>
+        <div class="legend-tabs">
+          <span class="legend-item"><span class="legend-dot" style="background:var(--green)"></span>Envolvente</span>&nbsp;&nbsp;
+          <span class="legend-item"><span class="legend-dot" style="background:var(--cyan)"></span>S1</span>&nbsp;&nbsp;
+          <span class="legend-item"><span class="legend-dot" style="background:var(--red)"></span>S2</span>
+        </div>
+        <div class="chart-body"><canvas id="chartSeg"></canvas></div>
+      </div>
+    </div>
+
+    <p class="section-title">Ciclos Cardíacos Segmentados</p>
+    <div class="cycles-grid" id="cyclesGrid"></div>
+
+    <p class="section-title">Extracción de Características (MFCC)</p>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 7A</span><h3>MFCC · Media</h3></div></div>
+        <p class="chart-desc">Media de los 13 coeficientes cepstrales.</p>
+        <div class="chart-body"><canvas id="chartMfccMean"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 7B</span><h3>MFCC · Desv. Estándar</h3></div></div>
+        <p class="chart-desc">Variabilidad — captura irregularidad del ritmo.</p>
+        <div class="chart-body"><canvas id="chartMfccStd"></canvas></div>
+      </div>
+      <div class="chart-card full">
+        <div class="chart-card-header"><div class="chart-label"><span class="stage-badge">ETAPA 7C</span><h3>Espectrograma MFCC (Primer Ciclo)</h3></div></div>
+        <p class="chart-desc">Mapa de calor MFCC [13 coef × frames].</p>
+        <div class="chart-body"><canvas id="mfccHeatmap" height="160"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="center-state" id="centerState">
+    <div class="big">💓</div>
+    <p>CARGANDO DIAGNÓSTICO…</p>
+    <p class="sub">Recuperando audio del servidor</p>
+  </div>
+
+</div>
+
+<script>
+Chart.defaults.color='#6b8cae';Chart.defaults.borderColor='#1a2e4a';
+Chart.defaults.font.family="'Space Mono',monospace";Chart.defaults.font.size=10;
+Chart.defaults.plugins.legend.display=false;Chart.defaults.animation={duration:500};
+Chart.defaults.elements.point.radius=0;Chart.defaults.elements.line.tension=0.3;
+
+const chartInstances={};
+const $=id=>document.getElementById(id);
+const C={cyan:'#00e5ff',green:'#00ff9d',red:'#ff4d6d',yellow:'#ffd166',purple:'#c77dff',blue:'#4895ef'};
+const STAGES=['Cargando audio','Filtro Pasa-Altas','Denoising Espectral','Filtro Pasa-Banda','Envolvente Hilbert','Envolvente Shannon','Detección S1/S2','Segmentando ciclos','Extrayendo MFCC','Clasificando'];
+
+/* ── AUTO-ARRANQUE ── */
+const urlParams=new URLSearchParams(window.location.search);
+const diagId=urlParams.get('diagId');
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (!diagId) {
+    $('centerState').innerHTML = `<div class="big">🔗</div><p>ACCEDE DESDE EL HISTORIAL DE PACIENTES</p><p class="sub">Abre un diagnóstico y pulsa "📊 Ver Pipeline de Señal"</p>`;
+    return;
+  }
+
+  // Primero cargamos datos del diagnóstico (nombre, etc.)
+  fetch(`/api/diagnostico/${diagId}`)
+    .then(r => r.json())
+    .then(diag => {
+      $('chipNombre').textContent = diag.nombre || '—';
+      $('patientChip').style.display = 'flex';
+      $('centerState').style.display = 'none';
+      showProgress();
+
+      // Ahora leemos los datos visuales ya guardados en la BD
+      return fetch(`/api/diagnostico/${diagId}/visual`);
+    })
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then(data => setTimeout(() => renderDashboard(data), 500))
+    .catch(err => {
+      $('progressWrapper').style.display = 'none';
+      $('centerState').innerHTML = `<div class="big">⚠️</div><p>ERROR AL CARGAR</p><p class="sub">${err.message}</p>`;
+      $('centerState').style.display = 'block';
+    });
+});
+
+/* ── PROGRESS ── */
+function showProgress(){
+  $('centerState').style.display='none';
+  $('progressWrapper').style.display='block';
+  $('pipelineSection').style.display='none';
+  $('diagBanner').style.display='none';
+  const el=$('stagePills');el.innerHTML='';
+  STAGES.forEach((s,i)=>{const p=document.createElement('span');p.className='stage-pill';p.id=`pill-${i}`;p.textContent=s;el.appendChild(p);});
+  let i=0;
+  const iv=setInterval(()=>{
+    if(i>0)$(`pill-${i-1}`)?.classList.replace('active','done');
+    if(i<STAGES.length){
+      $(`pill-${i}`)?.classList.add('active');
+      $('progressLabel').textContent=STAGES[i];
+      const pct=Math.round((i+1)/STAGES.length*100);
+      $('progressFill').style.width=pct+'%';
+      $('progressPct').textContent=pct+'%';
+    }
+    i++;if(i>STAGES.length)clearInterval(iv);
+  },300);
+}
+
+
+
+/* ── RENDER ── */
+function renderDashboard(data){
+  $('progressWrapper').style.display='none';
+  renderBanner(data);
+  renderPipeline(data.pipeline,data.fs);
+  $('pipelineSection').style.display='block';
+}
+
+function renderBanner(data){
+  const ok=(data.class||'').toLowerCase()==='normal';
+  const b=$('diagBanner');
+  b.className='diag-banner '+(ok?'normal':'anomaly');
+  $('diagIcon').textContent=ok?'💚':'⚠️';
+  $('diagTitle').textContent=data.class||'Desconocido';
+  $('diagTitle').style.color=ok?C.green:C.red;
+  $('diagSub').textContent=`Confianza ${data.confidence}% · ${data.duration}s · ${data.fs} Hz`;
+  $('diagStats').innerHTML=`
+    <div class="stat-box"><div class="val" style="color:${C.cyan}">${data.bpm||'—'}</div><div class="lbl">BPM</div></div>
+    <div class="stat-box"><div class="val" style="color:${C.yellow}">${data.cycles}</div><div class="lbl">CICLOS</div></div>
+    <div class="stat-box"><div class="val" style="color:${ok?C.green:C.red}">${data.confidence}%</div><div class="lbl">CONFIANZA</div></div>`;
+  b.style.display='flex';
+}
+
+/* ── CHART HELPERS ── */
+function lineChart(id,t,y,color,label=''){
+  const c=$(id);if(!c)return;
+  if(chartInstances[id])chartInstances[id].destroy();
+  const ctx=c.getContext('2d');
+  const g=ctx.createLinearGradient(0,0,0,180);g.addColorStop(0,color+'44');g.addColorStop(1,color+'00');
+  chartInstances[id]=new Chart(ctx,{type:'line',data:{labels:t,datasets:[{label,data:y,borderColor:color,borderWidth:1.2,backgroundColor:g,fill:true,pointRadius:0}]},options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{tooltip:{callbacks:{title:i=>`t = ${parseFloat(i[0].label).toFixed(3)}s`,label:i=>`${i.dataset.label||'amp'}: ${parseFloat(i.raw).toFixed(4)}`}}},scales:{x:{type:'category',ticks:{maxTicksLimit:8,callback:(_,i,tk)=>{const r=t[Math.floor(i*t.length/(tk.length||1))];return r?parseFloat(r).toFixed(1)+'s':''}},grid:{color:'#1a2e4a'}},y:{grid:{color:'#1a2e4a'}}}}});
+}
+
+function segChart(id,t,env,s1,s2){
+  const c=$(id);if(!c)return;
+  if(chartInstances[id])chartInstances[id].destroy();
+  const ctx=c.getContext('2d');
+  const g=ctx.createLinearGradient(0,0,0,200);g.addColorStop(0,C.green+'33');g.addColorStop(1,C.green+'00');
+  const sc=(idxs,color,label)=>({type:'scatter',label,backgroundColor:color,borderColor:color,pointRadius:5,pointStyle:'triangle',data:idxs.map(i=>({x:parseFloat(t[i]??0),y:parseFloat(env[i]??0)}))});
+  chartInstances[id]=new Chart(ctx,{data:{labels:t,datasets:[{type:'line',label:'Envolvente',data:env,borderColor:C.green,borderWidth:1.4,backgroundColor:g,fill:true,pointRadius:0,tension:0.4},sc(s1,C.cyan,'S1'),sc(s2,C.red,'S2')]},options:{responsive:true,plugins:{legend:{display:true,labels:{color:'#6b8cae',boxWidth:10}},tooltip:{mode:'nearest',intersect:true}},scales:{x:{type:'category',ticks:{maxTicksLimit:8,callback:(_,i,tk)=>{const r=t[Math.floor(i*t.length/(tk.length||1))];return r?parseFloat(r).toFixed(1)+'s':''}},grid:{color:'#1a2e4a'}},y:{grid:{color:'#1a2e4a'}}}}});
+}
+
+function barChart(id,values,color,label){
+  const c=$(id);if(!c)return;
+  if(chartInstances[id])chartInstances[id].destroy();
+  chartInstances[id]=new Chart(c.getContext('2d'),{type:'bar',data:{labels:values.map((_,i)=>`C${i+1}`),datasets:[{label,data:values,backgroundColor:values.map(v=>v>=0?color+'bb':C.red+'bb'),borderColor:values.map(v=>v>=0?color:C.red),borderWidth:1,borderRadius:3}]},options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>`${label}: ${parseFloat(i.raw).toFixed(3)}`}}},scales:{x:{grid:{color:'#1a2e4a'}},y:{grid:{color:'#1a2e4a'}}}}});
+}
+
+function cycleChart(id,tArr,yArr,idx,color){
+  const c=$(id);if(!c)return;
+  if(chartInstances[id])chartInstances[id].destroy();
+  const ctx=c.getContext('2d');
+  const g=ctx.createLinearGradient(0,0,0,140);g.addColorStop(0,color+'44');g.addColorStop(1,color+'00');
+  chartInstances[id]=new Chart(ctx,{type:'line',data:{labels:tArr,datasets:[{label:`Ciclo ${idx+1}`,data:yArr,borderColor:color,borderWidth:1.4,backgroundColor:g,fill:true,pointRadius:0,tension:0.35}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{type:'category',ticks:{maxTicksLimit:5,callback:(_,i,tk)=>{const r=tArr[Math.floor(i*tArr.length/(tk.length||1))];return r?parseFloat(r).toFixed(2)+'s':''}},grid:{color:'#1a2e4a'}},y:{grid:{color:'#1a2e4a'}}}}});
+}
+
+function renderMfccHeatmap(matrix){
+  const canvas=$('mfccHeatmap');if(!canvas||!matrix||!matrix.length)return;
+  const ctx=canvas.getContext('2d');
+  const rows=matrix.length,cols=matrix[0].length;
+  const flat=matrix.flat(),minV=Math.min(...flat),maxV=Math.max(...flat),range=maxV-minV||1;
+  canvas.width=cols;canvas.height=rows;
+  const img=ctx.createImageData(cols,rows);
+  const cm=t=>{const stops=[[0,[0,20,80]],[.25,[0,180,220]],[.5,[0,255,150]],[.75,[255,210,0]],[1,[255,60,80]]];for(let i=0;i<stops.length-1;i++){const[t0,c0]=stops[i],[t1,c1]=stops[i+1];if(t>=t0&&t<=t1){const f=(t-t0)/(t1-t0);return c0.map((c,j)=>Math.round(c+f*(c1[j]-c)))}}return[0,0,0]};
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const t=(matrix[r][c]-minV)/range;const[R,G,B]=cm(t);const idx=(r*cols+c)*4;img.data[idx]=R;img.data[idx+1]=G;img.data[idx+2]=B;img.data[idx+3]=255;}
+  ctx.putImageData(img,0,0);
+  const d=document.createElement('canvas');d.width=canvas.parentElement.offsetWidth-28||600;d.height=160;
+  const dc=d.getContext('2d');dc.imageSmoothingEnabled=false;dc.drawImage(canvas,0,0,d.width,d.height);
+  canvas.width=d.width;canvas.height=160;ctx.drawImage(d,0,0);
+}
+
+function renderPipeline(p,fs){
+  const t=p.t;
+  lineChart('chartRaw',t,p.stage_0_raw,C.cyan,'Cruda');
+  lineChart('chartHP',t,p.stage_1_highpass,C.blue,'HP 20Hz');
+  lineChart('chartDen',t,p.stage_2_denoised,C.purple,'Denoised');
+  lineChart('chartBP',t,p.stage_3_bandpass,C.yellow,'BP 25-150Hz');
+  lineChart('chartEnvH',t,p.stage_4a_env_hilbert,C.green,'Hilbert');
+  lineChart('chartEnvS',t,p.stage_4b_env_shannon,C.cyan,'Shannon');
+  segChart('chartSeg',t,p.stage_4a_env_hilbert,p.stage_5_s1_idxs,p.stage_5_s2_idxs);
+  const ce=$('cyclesGrid');ce.innerHTML='';
+  const cols=[C.cyan,C.green,C.yellow,C.purple];
+  (p.stage_6_cycles||[]).forEach((cycle,i)=>{
+    const card=document.createElement('div');card.className='chart-card';
+    const cid=`chartCycle${i}`;
+    card.innerHTML=`<div class="chart-card-header"><div class="chart-label"><span class="stage-badge">CICLO ${i+1}</span><h3>${(cycle.t[cycle.t.length-1]*1000).toFixed(0)} ms</h3></div></div><div class="chart-body"><canvas id="${cid}" height="130"></canvas></div>`;
+    ce.appendChild(card);
+    requestAnimationFrame(()=>cycleChart(cid,cycle.t.map(v=>parseFloat(v).toFixed(3)),cycle.y,i,cols[i%cols.length]));
+  });
+  if(!(p.stage_6_cycles||[]).length)ce.innerHTML=`<p style="font-family:var(--font-mono);font-size:.72rem;color:var(--text-muted);padding:12px">Sin ciclos suficientes.</p>`;
+  barChart('chartMfccMean',p.stage_7_mfcc_mean,C.cyan,'Media');
+  barChart('chartMfccStd',p.stage_7_mfcc_std,C.yellow,'Std');
+  requestAnimationFrame(()=>renderMfccHeatmap(p.stage_7_mfcc_matrix));
+}
+</script>
+</body>
+</html>

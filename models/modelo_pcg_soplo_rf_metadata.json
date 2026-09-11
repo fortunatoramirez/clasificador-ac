@@ -1,0 +1,28 @@
+{
+  "feature_cols": [
+    "MFCC_1",
+    "MFCC_2",
+    "MFCC_3",
+    "MFCC_4",
+    "MFCC_5",
+    "MFCC_6",
+    "MFCC_7",
+    "MFCC_8",
+    "MFCC_9",
+    "MFCC_10",
+    "MFCC_11",
+    "MFCC_12",
+    "MFCC_13",
+    "RMS"
+  ],
+  "umbral_decision": 0.15,
+  "clases": {
+    "0": "Sano",
+    "2": "Soplo"
+  },
+  "metricas_examen_final": {
+    "sensibilidad": 0.735,
+    "especificidad": 0.699,
+    "n_pacientes_prueba": 117
+  }
+}
