@@ -14,6 +14,7 @@ import joblib
 warnings.filterwarnings("ignore")
 
 MAX_POINTS = 2000
+EDAD_CORTE_ADULTO = 18  
 
 
 @contextlib.contextmanager
@@ -165,10 +166,25 @@ def main():
         if len(sys.argv) < 2:
             raise Exception("No se recibió la ruta del archivo")
 
-        file_path     = sys.argv[1]
-        model_dir     = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'models')
-        model_path    = os.path.join(model_dir, "modelo_pcg_soplo_rf.joblib")
-        metadata_path = os.path.join(model_dir, "modelo_pcg_soplo_rf_metadata.json")
+        file_path = sys.argv[1]
+        edad = None
+        if len(sys.argv) > 2:
+            try:
+                edad = int(sys.argv[2])
+            except ValueError:
+                edad = None  # si llega algo no numerico, seguimos sin edad en vez de tronar
+
+        model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'models')
+
+        # ── Seleccion de modelo segun edad ──────────────────────────────────
+        if edad is not None and edad >= EDAD_CORTE_ADULTO:
+            model_path      = os.path.join(model_dir, "modelo_pcg_soplo_adultos_rf.joblib")
+            metadata_path   = os.path.join(model_dir, "modelo_pcg_soplo_adultos_rf_metadata.json")
+            poblacion_usada = "adultos"
+        else:
+            model_path      = os.path.join(model_dir, "modelo_pcg_soplo_rf.joblib")
+            metadata_path   = os.path.join(model_dir, "modelo_pcg_soplo_rf_metadata.json")
+            poblacion_usada = "pediatrico" if edad is not None else "pediatrico (edad no proporcionada)"
 
         modelo = joblib.load(model_path)
         with open(metadata_path) as f:
@@ -248,15 +264,16 @@ def main():
         mfcc_std_g  = safe(np.std(mfcc_arr,  axis=0)) if len(mfcc_arr) > 0 else [0]*13
 
         response = {
-            "status":     "success",
-            "class":      clase,
-            "confidence": confidence,
-            "confiable":   confiable,
-            "advertencia": advertencia,
-            "cycles":     int(len(labels)),
-            "bpm":        bpm_est,
-            "fs":         int(fs),
-            "duration":   round(float(len(x) / fs), 2),
+            "status":       "success",
+            "class":        clase,
+            "confidence":   confidence,
+            "confiable":    confiable,
+            "advertencia":  advertencia,
+            "modelo_usado": poblacion_usada,
+            "cycles":       int(len(labels)),
+            "bpm":          bpm_est,
+            "fs":           int(fs),
+            "duration":     round(float(len(x) / fs), 2),
             "pipeline": {
                 "t": t_ds,
                 "stage_0_raw":          x_ds,
@@ -279,6 +296,5 @@ def main():
 
     print(json.dumps(response))
 
-#python arboldeprediccion.py "C:\Users\emigo\OneDrive\Documentos\Servicio Social\the-circor-digiscope-phonocardiogram-dataset-1.0.3\the-circor-digiscope-phonocardiogram-dataset-1.0.3\training_data\9979_AV.wav" | python -c "import json,sys; d=json.load(sys.stdin); d.pop('pipeline',None); print(json.dumps(d, indent=2, ensure_ascii=False))"
 if __name__ == "__main__":
     main()
