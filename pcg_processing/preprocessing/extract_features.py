@@ -120,8 +120,9 @@ def main():
         proc = HeartSignalProcessor()
         x, fs, t = proc.preprocess_audio(file_path)
         Env      = proc.compute_shannon_envelope(x, fs)
-        iS1      = proc.detect_cycles(Env, x, t, fs)
-        features = proc.extract_features(x, fs, iS1)
+        #iS1      = proc.detect_cycles(Env, x, t, fs)
+        iS1_idx = proc.detect_cycles(Env, x, t, fs)
+        features = proc.extract_features(x, fs, iS1_idx) #aqui era iS1
 
         rows = []
         for feat in features:
