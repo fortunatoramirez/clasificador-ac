@@ -1,0 +1,31 @@
+{
+  "feature_cols": [
+    "MFCC_1",
+    "MFCC_2",
+    "MFCC_3",
+    "MFCC_4",
+    "MFCC_5",
+    "MFCC_6",
+    "MFCC_7",
+    "MFCC_8",
+    "MFCC_9",
+    "MFCC_10",
+    "MFCC_11",
+    "MFCC_12",
+    "MFCC_13",
+    "RMS"
+  ],
+  "umbral_decision": 0.15,
+  "clases": {
+    "0": "Sano",
+    "2": "Soplo"
+  },
+  "poblacion": "adultos",
+  "filtro_calidad": "SQI=1 (PhysioNet2016)",
+  "metricas_examen_final": {
+    "sensibilidad": 0.967741935483871,
+    "especificidad": 0.8478260869565217,
+    "auc": 0.9713071415489475,
+    "n_sujetos_prueba": 507
+  }
+}
