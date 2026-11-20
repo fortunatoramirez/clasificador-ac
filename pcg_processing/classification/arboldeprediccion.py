@@ -3,7 +3,6 @@ import sys
 import os
 import json
 import warnings
-import contextlib
 import numpy as np
 import librosa
 import pandas as pd
@@ -14,18 +13,7 @@ import joblib
 warnings.filterwarnings("ignore")
 
 MAX_POINTS = 2000
-EDAD_CORTE_ADULTO = 18  
-
-
-@contextlib.contextmanager
-def suppress_stdout():
-    with open(os.devnull, 'w') as devnull:
-        old_stdout = sys.stdout
-        sys.stdout = devnull
-        try:
-            yield
-        finally:
-            sys.stdout = old_stdout
+EDAD_CORTE_ADULTO = 18  # TODO: confirmar con tu asesor si este es el corte correcto
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -193,12 +181,17 @@ def main():
         umbral       = metadata['umbral_decision']
         label_map    = {int(k): v for k, v in metadata['clases'].items()}
 
+        # El modelo de adultos se entreno con la etiqueta "normal/abnormal" de PhysioNet 2016
+        # (mas amplia que "soplo"), asi que su clase positiva se reporta como "Anormal".
+        if poblacion_usada == "adultos":
+            label_map[2] = "Anormal"
+
         processor = HeartSignalProcessor()
 
         # ── Señal ────────────────────────────────────────────────────────────
-        x, fs, t             = processor.preprocess_audio(file_path)
-        Env                  = processor.compute_shannon_envelope(x, fs)
-        iS1_idx, ciclos_ref  = processor.detect_cycles(Env, x, t, fs)
+        x, fs, t              = processor.preprocess_audio(file_path)
+        Env                   = processor.compute_shannon_envelope(x, fs)
+        iS1_idx, ciclos_ref   = processor.detect_cycles(Env, x, t, fs)
         features, MFCC_matrix = processor.extract_features(x, fs, iS1_idx)
 
         # ── Clasificación ────────────────────────────────────────────────────
